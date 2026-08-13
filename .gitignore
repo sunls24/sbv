@@ -3,10 +3,12 @@
 /local.properties
 .DS_Store
 /build
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 /signing.properties
+/key.jks
 /.idea/jarRepositories.xml
 /.idea/migrations.xml
 /.idea/codeStyles/

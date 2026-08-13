@@ -21,11 +21,6 @@
 #-renamesourcefileattribute SourceFile
 
 # akdanmaku
--dontwarn com.badlogic.gdx.backends.android.AndroidFragmentApplication
--dontwarn com.badlogic.gdx.utils.GdxBuild
--dontwarn com.badlogic.gdx.jnigen.BuildTarget*
--dontwarn com.badlogic.gdx.graphics.g2d.freetype.FreetypeBuild
--keep class com.badlogic.gdx.controllers.android.AndroidControllers
 -keep class com.kuaishou.akdanmaku.ecs.DanmakuContext
 -keepclasseswithmembers class * {
     public <init>(com.kuaishou.akdanmaku.ecs.DanmakuContext);
@@ -88,28 +83,6 @@
 #    static <1>$$serializer INSTANCE;
 #}
 
-# ktor 混淆后，请求参数会莫名其妙消失
--keep class io.ktor.**
-# 这部分是加上不混淆 ktor 后冒出来的 missing rules
+# Ktor optional JVM management APIs are unavailable on Android.
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
-
-# LibVLC
--keep class org.videolan.libvlc.** { *; }
-
-# gRPC
--keep class bilibili.rpc.** { *; }
--keep class com.google.protobuf.** { *; }
--dontwarn com.google.protobuf.GeneratedMessageV3$Builder
--dontwarn com.google.protobuf.GeneratedMessageV3$BuilderParent
--dontwarn com.google.protobuf.GeneratedMessageV3$FieldAccessorTable
--dontwarn com.google.protobuf.GeneratedMessageV3
--dontwarn com.google.protobuf.RepeatedFieldBuilderV3
-
-# kotlin-logging
--dontwarn ch.qos.logback.classic.Level
--dontwarn ch.qos.logback.classic.Logger
--dontwarn ch.qos.logback.classic.LoggerContext
--dontwarn ch.qos.logback.classic.spi.ILoggingEvent
--dontwarn ch.qos.logback.classic.spi.LogbackServiceProvider
--dontwarn ch.qos.logback.classic.spi.LoggingEvent

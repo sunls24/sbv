@@ -4,19 +4,18 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   build-release:
     name: Build Release Apk
     runs-on: macos-latest
-    if: github.repository == 'aaa1115910/bv'
+    if: github.repository == 'sunls24/bv'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ github.sha }}
           fetch-depth: 0
           submodules: 'true'
 
@@ -26,11 +25,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Write google-services.json
-        env:
-          DATA: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo $DATA > app/google-services.json
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -38,36 +32,26 @@ jobs:
         env:
           SIGNING_PROPERTIES: ${{ secrets.SIGNING_PROPERTIES }}
         run: |
-          echo ${{ secrets.SIGNING_PROPERTIES }} > encoded_signing_properties
-          base64 -Dd -i encoded_signing_properties > signing.properties
+          echo "$SIGNING_PROPERTIES" | base64 -Dd > signing.properties
 
-      - name: Add jks file
+      - name: Add signing key
+        env:
+          SIGN_KEY: ${{ secrets.SIGN_KEY }}
         run: |
-          echo ${{ secrets.SIGN_KEY }} > ./encoded_key
-          base64 -Dd -i encoded_key > key.jks
+          echo "$SIGN_KEY" | base64 -Dd > key.jks
 
       - name: Build apk
-        run: ./gradlew assembleDefaultRelease assembleDefaultDebug
+        run: ./gradlew assembleRelease
 
-      - name: Read release apk output metadata
-        id: apk-meta-release
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: app/build/outputs/apk/default/release/output-metadata.json
-
-      - name: Read debug apk output metadata
-        id: apk-meta-release-debug
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: app/build/outputs/apk/default/debug/output-metadata.json
-
-      - name: Parse apk infos
-        id: apk-infos
+      - name: Validate release version
         run: |
-          echo "release_info_version_code=${{ fromJson(steps.apk-meta-release.outputs.content).elements[0].versionCode }}" >> $GITHUB_ENV
-          echo "release_info_version_name=${{ fromJson(steps.apk-meta-release.outputs.content).elements[0].versionName }}" >> $GITHUB_ENV
-          echo "release_debug_info_version_code=${{ fromJson(steps.apk-meta-release-debug.outputs.content).elements[0].versionCode }}" >> $GITHUB_ENV
-          echo "release_debug_info_version_name=${{ fromJson(steps.apk-meta-release-debug.outputs.content).elements[0].versionName }}" >> $GITHUB_ENV
+          release_version_name="$(jq -r '.elements[0].versionName' app/build/outputs/apk/release/output-metadata.json)"
+          tag_version_name="${GITHUB_REF_NAME#v}"
+          if [[ "$release_version_name" != "$tag_version_name" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match APK version $release_version_name" >&2
+            exit 1
+          fi
+          echo "release_info_version_name=$release_version_name" >> "$GITHUB_ENV"
 
       - name: Get changelog
         id: changelog
@@ -78,32 +62,22 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_ENV"
 
-      # upload artifacts release debug
-
-      - name: Archive release debug build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Release debug build artifact
-          path: app/build/outputs/apk/default/debug/BV_${{ env.release_debug_info_version_code }}_${{ env.release_debug_info_version_name }}_default_universal.apk
-
-      # upload artifacts release
-
       - name: Archive release build mappings
         uses: actions/upload-artifact@v4
         with:
           name: Release build mappings
-          path: app/build/outputs/mapping/defaultRelease
+          path: app/build/outputs/mapping/release
 
       - name: Archive release build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Release build artifact
-          path: app/build/outputs/apk/default/release/BV_${{ env.release_info_version_code }}_${{ env.release_info_version_name }}_default_universal.apk
+          path: app/build/outputs/apk/release/*.apk
 
       # zip mapping because softprops/action-gh-release can't upload folder
 
       - name: Zip mapping
-        run: zip -rj mapping.zip app/build/outputs/mapping/defaultRelease
+        run: zip -rj mapping.zip app/build/outputs/mapping/release
 
       # upload to github release
 
@@ -111,8 +85,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            app/build/outputs/apk/default/debug/BV_${{ env.release_debug_info_version_code }}_${{ env.release_debug_info_version_name }}_default_universal.apk
-            app/build/outputs/apk/default/release/BV_${{ env.release_info_version_code }}_${{ env.release_info_version_name }}_default_universal.apk
+            app/build/outputs/apk/release/*.apk
             mapping.zip
           tag_name: ${{ github.ref_name }}
           name: ${{ env.release_info_version_name }}
