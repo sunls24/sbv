@@ -24,7 +24,6 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -124,7 +123,6 @@ fun AppQRLoginContent(
                             text = stringResource(R.string.login_retry),
                             style = MaterialTheme.typography.displaySmall,
                             color = Color.White,
-                            fontSize = 26.sp
                         )
                     }
                 }

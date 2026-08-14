@@ -7,6 +7,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -30,6 +33,7 @@ fun HomeContent(
     navFocusRequester: FocusRequester,
     contentFocusRequester: FocusRequester,
     selectedTab: HomeTopNavItem,
+    refreshRequest: Long,
     recommendViewModel: RecommendViewModel = koinViewModel(),
     popularViewModel: PopularViewModel = koinViewModel(),
     dynamicViewModel: DynamicViewModel = koinViewModel(),
@@ -40,6 +44,9 @@ fun HomeContent(
     val recommendGridState = rememberLazyGridState()
     val popularGridState = rememberLazyGridState()
     val dynamicsGridState = rememberLazyGridState()
+    var handledRefreshRequest by remember(selectedTab) {
+        mutableLongStateOf(refreshRequest)
+    }
 
     fun loadTabData(tab: HomeTopNavItem) {
         if (tab == HomeTopNavItem.Dynamics && !isLogin) return
@@ -60,6 +67,13 @@ fun HomeContent(
 
     LaunchedEffect(selectedTab) {
         loadTabData(selectedTab)
+    }
+
+    LaunchedEffect(refreshRequest) {
+        if (refreshRequest > handledRefreshRequest) {
+            handledRefreshRequest = refreshRequest
+            refreshPageData(selectedTab)
+        }
     }
 
     LaunchedEffect(isLogin) {
@@ -88,6 +102,7 @@ fun HomeContent(
             HomeTopNavItem.Recommend -> HomeUgcGrid(
                 modifier = Modifier.focusRequester(contentFocusRequester),
                 gridState = recommendGridState,
+                navFocusRequester = navFocusRequester,
                 items = recommendViewModel.recommendVideoList,
                 loading = recommendViewModel.loading,
                 onLoadMore = recommendViewModel::loadMore,
@@ -97,6 +112,7 @@ fun HomeContent(
             HomeTopNavItem.Popular -> HomeUgcGrid(
                 modifier = Modifier.focusRequester(contentFocusRequester),
                 gridState = popularGridState,
+                navFocusRequester = navFocusRequester,
                 items = popularViewModel.popularVideoList,
                 loading = popularViewModel.loading,
                 showNoMore = !popularViewModel.hasMore,
@@ -107,6 +123,7 @@ fun HomeContent(
             HomeTopNavItem.Dynamics -> DynamicsScreen(
                 modifier = Modifier.focusRequester(contentFocusRequester),
                 gridState = dynamicsGridState,
+                navFocusRequester = navFocusRequester,
                 onAddWatchLater = toViewViewModel::addToView,
                 dynamicViewModel = dynamicViewModel,
             )

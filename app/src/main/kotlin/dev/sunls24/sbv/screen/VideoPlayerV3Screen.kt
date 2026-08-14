@@ -71,7 +71,9 @@ fun VideoPlayerV3Screen(
     LaunchedEffect(Unit) {
         delay(5000)
         while (isActive) {
-            if (uiState.playerState == PlayerState.Playing) playerViewModel.trySendHeartbeat()
+            if (playerViewModel.videoPlayer?.isPlaying == true) {
+                playerViewModel.trySendHeartbeat()
+            }
             // 周期延迟
             delay(15000)
         }

@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.colorResource
 import androidx.core.view.WindowCompat
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -15,6 +16,11 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.darkColorScheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import dev.sunls24.sbv.R
+
+@Composable
+internal fun focusedTextColor(hasFocus: Boolean) =
+    if (hasFocus) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,6 +28,7 @@ fun SBVTheme(
     content: @Composable () -> Unit
 ) {
     val view = LocalView.current
+    val backgroundColor = colorResource(R.color.window_background)
 
     val colorSchemeTv = darkColorScheme(
         primary = SBVColorTokens.primary,
@@ -32,7 +39,7 @@ fun SBVTheme(
         onSecondary = SBVColorTokens.onSecondary,
         secondaryContainer = SBVColorTokens.secondaryContainer,
         onSecondaryContainer = SBVColorTokens.onSecondaryContainer,
-        background = SBVColorTokens.background,
+        background = backgroundColor,
         onBackground = SBVColorTokens.onBackground,
         surface = SBVColorTokens.surface,
         onSurface = SBVColorTokens.onSurface,
@@ -58,7 +65,7 @@ fun SBVTheme(
         onSecondary = SBVColorTokens.onSecondary,
         secondaryContainer = SBVColorTokens.secondaryContainer,
         onSecondaryContainer = SBVColorTokens.onSecondaryContainer,
-        background = SBVColorTokens.background,
+        background = backgroundColor,
         onBackground = SBVColorTokens.onBackground,
         surface = SBVColorTokens.surface,
         onSurface = SBVColorTokens.onSurface,
@@ -77,6 +84,7 @@ fun SBVTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
+            @Suppress("DEPRECATION")
             window.statusBarColor = colorSchemeTv.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
@@ -103,7 +111,7 @@ fun SBVTheme(
                         modifier = Modifier.fillMaxSize(),
                         shape = SBVShapeTokens.extraSmall,
                         colors = SurfaceDefaults.colors(
-                            containerColor = SBVColorTokens.background,
+                            containerColor = backgroundColor,
                         ),
                     ) {
                         content()

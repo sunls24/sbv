@@ -71,8 +71,7 @@ data class PlayerUiState(
 data class SeekerState(
     val totalDuration: Long = 0,
     val currentTime: Long = 0,
-    val bufferedPercentage: Int = 0,
-    val debugInfo: String = ""
+    val bufferedPercentage: Int = 0
 )
 
 data class DanmakuState(

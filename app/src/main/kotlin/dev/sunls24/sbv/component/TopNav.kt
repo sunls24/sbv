@@ -1,14 +1,11 @@
 package dev.sunls24.sbv.component
 
 import android.content.Context
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -28,54 +25,40 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.TabRowScope
 import androidx.tv.material3.Text
-import dev.sunls24.biliapi.entity.ugc.UgcTypeV2
 import dev.sunls24.sbv.SBVApp
 import dev.sunls24.sbv.ui.theme.SBVSpacing
-import dev.sunls24.sbv.util.getDisplayName
 
 @Composable
 fun TopNav(
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
     items: List<TopNavItem>,
-    isLargePadding: Boolean,
-    indicatorStyle: TopNavIndicatorStyle = TopNavIndicatorStyle.Pill,
+    selectedItem: TopNavItem? = null,
     onSelectedChanged: (TopNavItem) -> Unit = {},
     onClick: (TopNavItem) -> Unit = {}
 ) {
-    val focusRequester = remember { FocusRequester() }
+    val fallbackFocusRequester = remember { FocusRequester() }
+    val firstTabFocusRequester = focusRequester ?: fallbackFocusRequester
+    val initialSelectedTabIndex =
+        selectedItem?.let { item -> items.indexOf(item).takeIf { it >= 0 } } ?: 0
 
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val verticalPadding by animateDpAsState(
-        targetValue = if (isLargePadding) SBVSpacing.md else SBVSpacing.sm,
-        label = "top nav vertical padding"
-    )
-
+    var selectedTabIndex by remember(initialSelectedTabIndex) {
+        mutableIntStateOf(initialSelectedTabIndex)
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SBVSpacing.md, vertical = verticalPadding),
+            .padding(horizontal = SBVSpacing.md, vertical = SBVSpacing.sm),
         horizontalArrangement = Arrangement.Center
     ) {
         TabRow(
-            modifier = Modifier
-            .focusRestorer(focusRequester),
+            modifier = Modifier.focusRestorer(firstTabFocusRequester),
             selectedTabIndex = selectedTabIndex,
-            separator = { Spacer(modifier = Modifier.width(SBVSpacing.lg)) },
             indicator = { tabPositions, doesTabRowHaveFocus ->
-                val currentTabPosition = tabPositions.getOrNull(selectedTabIndex) ?: return@TabRow
-                when (indicatorStyle) {
-                    TopNavIndicatorStyle.Pill -> TabRowDefaults.PillIndicator(
-                        currentTabPosition = currentTabPosition,
+                tabPositions.getOrNull(selectedTabIndex)?.let { position ->
+                    TabRowDefaults.UnderlinedIndicator(
+                        currentTabPosition = position,
                         doesTabRowHaveFocus = doesTabRowHaveFocus,
-                        activeColor = MaterialTheme.colorScheme.primary,
-                        inactiveColor = MaterialTheme.colorScheme.primaryContainer,
-                    )
-
-                    TopNavIndicatorStyle.Underline -> TabRowDefaults.UnderlinedIndicator(
-                        currentTabPosition = currentTabPosition,
-                        doesTabRowHaveFocus = doesTabRowHaveFocus,
-                        activeColor = MaterialTheme.colorScheme.primary,
-                        inactiveColor = MaterialTheme.colorScheme.secondary,
                     )
                 }
             },
@@ -83,10 +66,12 @@ fun TopNav(
             items.forEachIndexed { index, tab ->
                 NavItemTab(
                     modifier = Modifier
-                        .ifElse(index == 0, Modifier.focusRequester(focusRequester)),
+                        .ifElse(
+                            index == selectedTabIndex,
+                            Modifier.focusRequester(firstTabFocusRequester)
+                        ),
                     topNavItem = tab,
                     selected = index == selectedTabIndex,
-                    indicatorStyle = indicatorStyle,
                     onFocus = {
                         selectedTabIndex = index
                         onSelectedChanged(tab)
@@ -103,7 +88,6 @@ private fun TabRowScope.NavItemTab(
     modifier: Modifier = Modifier,
     topNavItem: TopNavItem,
     selected: Boolean,
-    indicatorStyle: TopNavIndicatorStyle,
     onClick: () -> Unit,
     onFocus: () -> Unit
 ) {
@@ -112,27 +96,19 @@ private fun TabRowScope.NavItemTab(
     Tab(
         modifier = modifier,
         selected = selected,
-        colors = when (indicatorStyle) {
-            TopNavIndicatorStyle.Pill -> TabDefaults.pillIndicatorTabColors()
-            TopNavIndicatorStyle.Underline -> TabDefaults.underlinedIndicatorTabColors()
-        },
         onFocus = onFocus,
-        onClick = onClick
+        onClick = onClick,
+        colors = TabDefaults.underlinedIndicatorTabColors(),
     ) {
         Text(
-                modifier = Modifier
-                    .height(44.dp)
-                    .padding(horizontal = SBVSpacing.lg, vertical = SBVSpacing.sm),
+            modifier = Modifier
+                .height(44.dp)
+                .padding(horizontal = SBVSpacing.lg, vertical = SBVSpacing.sm),
             text = topNavItem.getDisplayName(context),
             color = LocalContentColor.current,
             style = MaterialTheme.typography.labelLarge
         )
     }
-}
-
-enum class TopNavIndicatorStyle {
-    Pill,
-    Underline,
 }
 
 interface TopNavItem {
@@ -156,34 +132,15 @@ enum class HomeTopNavItem(val code: Int, private val displayName: String) : TopN
     }
 }
 
-enum class UgcTopNavItem(val ugcTypeV2: UgcTypeV2) : TopNavItem {
-    Douga(UgcTypeV2.Douga),
-    Game(UgcTypeV2.Game),
-    Kichiku(UgcTypeV2.Kichiku),
-    Music(UgcTypeV2.Music),
-    Dance(UgcTypeV2.Dance),
-    Cinephile(UgcTypeV2.Cinephile),
-    Ent(UgcTypeV2.Ent),
-    Knowledge(UgcTypeV2.Knowledge),
-    Tech(UgcTypeV2.Tech),
-    Information(UgcTypeV2.Information),
-    Food(UgcTypeV2.Food),
-    Life(UgcTypeV2.LifeJoy),
-    Car(UgcTypeV2.Car),
-    Fashion(UgcTypeV2.Fashion),
-    Sports(UgcTypeV2.Sports),
-    Animal(UgcTypeV2.Animal);
-
-    override fun getDisplayName(context: Context): String {
-        return ugcTypeV2.getDisplayName(context)
-    }
-}
-
 enum class PersonalTopNavItem : TopNavItem {
     ToView,
     History,
     Favorite,
     FollowingSeason;
+
+    companion object {
+        val displayOrder = listOf(ToView, Favorite, History, FollowingSeason)
+    }
 
     override fun getDisplayName(context: Context): String {
         return when (this) {

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.biliapi.entity.video.Subtitle
-import dev.sunls24.sbv.BuildConfig
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.activities.video.VideoInfoActivity
 import dev.sunls24.sbv.entity.VideoAspectRatio
@@ -97,6 +96,8 @@ fun VideoPlayerController(
     val scope = rememberCoroutineScope()
 
     var activePanel by remember { mutableStateOf(PlayerControllerPanel.None) }
+    var infoSeekFocus by remember { mutableStateOf(InfoSeekFocus.Seek) }
+    var resumeAfterRelatedVideos by remember { mutableStateOf(false) }
 
     var lastPressBack by remember { mutableLongStateOf(0L) }
     var goTime by remember { mutableLongStateOf(0L) }
@@ -175,6 +176,16 @@ fun VideoPlayerController(
         if (isPlaying) onPause() else onPlay()
     }
 
+    fun closeActivePanel() {
+        val shouldResume =
+            activePanel == PlayerControllerPanel.RelatedVideos && resumeAfterRelatedVideos
+
+        activePanel = PlayerControllerPanel.None
+        resumeAfterRelatedVideos = false
+
+        if (shouldResume) onPlay()
+    }
+
     fun handleKeyEvent(event: KeyEvent): Boolean {
         // 中键需要区分短按和长按
         val isConfirmKey =
@@ -188,7 +199,7 @@ fun VideoPlayerController(
         when (event.key) {
             Key.Back -> {
                 if (activePanel != PlayerControllerPanel.None) {
-                    activePanel = PlayerControllerPanel.None
+                    closeActivePanel()
                 } else {
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastPressBack < 3000) {
@@ -257,18 +268,21 @@ fun VideoPlayerController(
                 }
 
                 Key.DirectionDown -> {
+                    infoSeekFocus = InfoSeekFocus.Actions
                     activePanel = PlayerControllerPanel.InfoSeek
                     return true
                 }
 
                 Key.MediaRewind, Key.DirectionLeft -> {
                     if (uiState.showSkipToNextEp) onCancelSkipToNextEp()
+                    infoSeekFocus = InfoSeekFocus.Seek
                     activePanel = PlayerControllerPanel.InfoSeek
                     onDirectionLeft()
                     return true
                 }
 
                 Key.MediaFastForward, Key.DirectionRight -> {
+                    infoSeekFocus = InfoSeekFocus.Seek
                     activePanel = PlayerControllerPanel.InfoSeek
                     onDirectionRight()
                     return true
@@ -299,20 +313,6 @@ fun VideoPlayerController(
             }
     ) {
         content()
-        if (BuildConfig.DEBUG) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(Color.Black.copy(alpha = 0.3f))
-            ) {
-                Text(
-                    modifier = Modifier.padding(8.dp),
-                    text = seekerState.value.debugInfo
-                )
-            }
-        }
         if (uiState.subtitleId != -1L) {
             val currentTime = seekerState.value.currentTime
 
@@ -342,6 +342,7 @@ fun VideoPlayerController(
             show = activePanel == PlayerControllerPanel.RelatedVideos,
             relatedVideos = uiState.relatedVideos,
             onVideoClicked = {
+                resumeAfterRelatedVideos = false
                 onRelatedVideoClicked(it)
                 activePanel = PlayerControllerPanel.None
             }
@@ -351,6 +352,8 @@ fun VideoPlayerController(
             modifier = Modifier.focusable(),
             show = activePanel == PlayerControllerPanel.InfoSeek,
             isSeeking = isSeeking,
+            isPlaying = isPlaying,
+            initialFocus = infoSeekFocus,
             goTime = goTime,
             seekerState = seekerState.value,
             title = uiState.title,
@@ -373,7 +376,8 @@ fun VideoPlayerController(
                 activePanel = PlayerControllerPanel.Menu
             },
             onShowRelatedVideos = {
-                if (isPlaying) onPause()
+                resumeAfterRelatedVideos = isPlaying
+                if (resumeAfterRelatedVideos) onPause()
 
                 activePanel = PlayerControllerPanel.RelatedVideos
             },

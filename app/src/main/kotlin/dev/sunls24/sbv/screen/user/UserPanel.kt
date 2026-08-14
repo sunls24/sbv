@@ -1,17 +1,26 @@
 package dev.sunls24.sbv.component
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,17 +40,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
+import androidx.tv.material3.Button
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import dev.sunls24.sbv.R
+import dev.sunls24.sbv.tv.component.TvAlertDialog
+import dev.sunls24.sbv.tv.component.tvDialogButtonHeight
 import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.ui.theme.SBVTheme
 import dev.sunls24.sbv.util.Prefs
+import dev.sunls24.sbv.util.ImageSize
+import dev.sunls24.sbv.util.resizedImageUrl
 import dev.sunls24.sbv.util.requestFocus
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun UserPanelDialog(
@@ -50,8 +68,6 @@ fun UserPanelDialog(
     username: String,
     face: String,
     level: Int,
-    currentExp: Int,
-    nextLevelExp: Int,
     onHide: () -> Unit,
     onLogin: () -> Unit,
     onLogout: () -> Unit,
@@ -59,36 +75,67 @@ fun UserPanelDialog(
     onOpenPersonal: () -> Unit,
     onGoFollowingUp: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+    var visible by remember { mutableStateOf(false) }
+    val dismiss = {
+        if (visible) {
+            visible = false
+            scope.launch {
+                delay(180)
+                onHide()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) { visible = true }
+
     Dialog(
-        onDismissRequest = onHide,
+        onDismissRequest = dismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
             dismissOnClickOutside = true,
             usePlatformDefaultWidth = false,
         ),
     ) {
-        Surface(
-            modifier = modifier.widthIn(min = 560.dp, max = 720.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors = SurfaceDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    top = SBVSpacing.lg,
+                    end = SBVSpacing.lg,
+                    bottom = SBVSpacing.lg,
+                ),
+            contentAlignment = Alignment.CenterEnd,
         ) {
-            UserPanel(
-                modifier = Modifier.fillMaxWidth(),
-                isLogin = isLogin,
-                username = username,
-                face = face,
-                level = level,
-                currentExp = currentExp,
-                nextLevelExp = nextLevelExp,
-                onHide = onHide,
-                onLogin = onLogin,
-                onLogout = onLogout,
-                onOpenSettings = onOpenSettings,
-                onOpenPersonal = onOpenPersonal,
-                onGoFollowingUp = onGoFollowingUp,
-            )
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(180)) + slideInHorizontally(tween(180)) { it / 3 },
+                exit = fadeOut(tween(180)) + slideOutHorizontally(tween(180)) { it / 3 },
+            ) {
+                Surface(
+                    modifier = modifier
+                        .width(420.dp)
+                        .fillMaxHeight(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = SurfaceDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                ) {
+                    UserPanel(
+                        modifier = Modifier.fillMaxWidth(),
+                        isLogin = isLogin,
+                        username = username,
+                        face = face,
+                        level = level,
+                        onHide = dismiss,
+                        onLogin = onLogin,
+                        onLogout = onLogout,
+                        onOpenSettings = onOpenSettings,
+                        onOpenPersonal = onOpenPersonal,
+                        onGoFollowingUp = onGoFollowingUp,
+                    )
+                }
+            }
         }
     }
 }
@@ -100,8 +147,6 @@ fun UserPanel(
     username: String,
     face: String,
     level: Int,
-    currentExp: Int,
-    nextLevelExp: Int,
     onHide: () -> Unit,
     onLogin: () -> Unit = {},
     onLogout: () -> Unit,
@@ -111,10 +156,16 @@ fun UserPanel(
 ) {
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    val logoutDismissFocusRequester = remember { FocusRequester() }
     var inIncognitoMode by remember { mutableStateOf(Prefs.incognitoMode) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus(scope)
+    }
+
+    LaunchedEffect(showLogoutConfirmation) {
+        if (showLogoutConfirmation) logoutDismissFocusRequester.requestFocus(scope)
     }
 
     Column(
@@ -128,8 +179,6 @@ fun UserPanel(
                 username = username,
                 face = face,
                 level = level,
-                currentExp = currentExp,
-                nextLevelExp = nextLevelExp,
             )
         } else {
             Column(
@@ -150,7 +199,7 @@ fun UserPanel(
         if (isLogin) {
             UserPanelMenuItem(
                 modifier = Modifier.focusRequester(focusRequester),
-                title = "个人内容",
+                title = "我的内容",
                 icon = R.drawable.ic_symbol_person_filled,
                 onClick = {
                     onOpenPersonal()
@@ -158,7 +207,7 @@ fun UserPanel(
                 },
             )
             UserPanelMenuItem(
-                title = "正在关注",
+                title = "关注的 UP 主",
                 icon = R.drawable.ic_symbol_list_alt_filled,
                 onClick = {
                     onGoFollowingUp()
@@ -173,25 +222,22 @@ fun UserPanel(
                     onHide()
                 },
             )
-            UserPanelMenuItem(
-                title = if (inIncognitoMode) "隐身已开启" else "隐身已关闭",
-                icon = if (inIncognitoMode) {
-                    R.drawable.ic_symbol_visibility_off_filled
-                } else {
-                    R.drawable.ic_symbol_visibility_filled
-                },
-                onClick = {
-                    inIncognitoMode = !inIncognitoMode
-                    Prefs.incognitoMode = inIncognitoMode
-                },
+            UserPanelSwitchItem(
+                title = "隐身播放",
+                supportingText = "不会向 Bilibili 上传播放进度",
+                checked = inIncognitoMode,
+                onCheckedChange = { checked ->
+                    inIncognitoMode = checked
+                    Prefs.incognitoMode = checked
+                }
             )
+
+            Spacer(modifier = Modifier.height(SBVSpacing.md))
+
             UserPanelMenuItem(
                 title = "退出登录",
                 icon = R.drawable.ic_symbol_logout_filled,
-                onClick = {
-                    onLogout()
-                    onHide()
-                },
+                onClick = { showLogoutConfirmation = true },
             )
         } else {
             UserPanelMenuItem(
@@ -213,6 +259,36 @@ fun UserPanel(
             )
         }
     }
+
+    if (showLogoutConfirmation) {
+        TvAlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { Text(text = "退出登录？") },
+            text = { Text(text = "退出后需要重新扫码登录，当前本地设置会保留。") },
+            confirmButton = {
+                Button(
+                    modifier = Modifier.tvDialogButtonHeight(),
+                    onClick = {
+                        showLogoutConfirmation = false
+                        onLogout()
+                        onHide()
+                    },
+                ) {
+                    Text(text = "退出登录")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    modifier = Modifier
+                        .tvDialogButtonHeight()
+                        .focusRequester(logoutDismissFocusRequester),
+                    onClick = { showLogoutConfirmation = false },
+                ) {
+                    Text(text = "取消")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -220,11 +296,7 @@ private fun UserPanelHeader(
     username: String,
     face: String,
     level: Int,
-    currentExp: Int,
-    nextLevelExp: Int,
 ) {
-    val progress = currentExp.toFloat() / nextLevelExp.coerceAtLeast(1)
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -234,40 +306,27 @@ private fun UserPanelHeader(
     ) {
         AsyncImage(
             modifier = Modifier
-                .size(64.dp)
+                .size(56.dp)
                 .clip(CircleShape),
-            model = face,
+            model = face.resizedImageUrl(ImageSize.Avatar),
+            placeholder = painterResource(R.drawable.ic_symbol_account_circle_filled),
+            error = painterResource(R.drawable.ic_symbol_account_circle_filled),
             contentDescription = null,
             contentScale = ContentScale.Crop,
         )
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(SBVSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(SBVSpacing.xs),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SBVSpacing.sm),
-            ) {
-                Text(
-                    text = username,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "Lv.$level",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        color = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            }
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(MaterialTheme.shapes.extraSmall),
+            Text(
+                text = username,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = "Lv.$level",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
             )
         }
     }
@@ -294,6 +353,39 @@ private fun UserPanelMenuItem(
     )
 }
 
+@Composable
+private fun UserPanelSwitchItem(
+    title: String,
+    supportingText: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    ListItem(
+        selected = false,
+        leadingContent = {
+            Icon(
+                painter = painterResource(
+                    if (checked) R.drawable.ic_symbol_visibility_off_filled
+                    else R.drawable.ic_symbol_visibility_filled
+                ),
+                contentDescription = null,
+            )
+        },
+        headlineContent = { Text(text = title) },
+        supportingContent = {
+            Text(text = supportingText)
+        },
+        trailingContent = {
+            Switch(
+                modifier = Modifier.focusable(false),
+                checked = checked,
+                onCheckedChange = null,
+            )
+        },
+        onClick = { onCheckedChange(!checked) },
+    )
+}
+
 @Preview(device = "id:tv_1080p")
 @Composable
 private fun UserPanelPreview() {
@@ -309,8 +401,6 @@ private fun UserPanelPreview() {
             onOpenPersonal = {},
             onGoFollowingUp = {},
             level = 5,
-            currentExp = 100,
-            nextLevelExp = 200,
         )
     }
 }

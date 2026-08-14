@@ -14,19 +14,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.activities.video.UpInfoActivity
 import dev.sunls24.sbv.activities.video.VideoInfoActivity
 import dev.sunls24.sbv.activities.video.VideoPlayerV3Activity
-import dev.sunls24.sbv.component.LoadingTip
 import dev.sunls24.sbv.component.LazyGridLoadMoreEffect
 import dev.sunls24.sbv.component.TvLazyVerticalGrid
 import dev.sunls24.sbv.component.videocard.SmallVideoCard
+import dev.sunls24.sbv.component.loadingTipItem
 import dev.sunls24.sbv.entity.carddata.VideoCardData
+import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.util.formatHourMinSec
 import dev.sunls24.sbv.util.toWanString
 import dev.sunls24.sbv.viewmodel.home.DynamicViewModel
@@ -35,6 +36,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun DynamicsScreen(
     onAddWatchLater: (Long) -> Unit,
+    navFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     gridState: LazyGridState = rememberLazyGridState(),
     dynamicViewModel: DynamicViewModel = koinViewModel()
@@ -51,16 +53,26 @@ fun DynamicsScreen(
         TvLazyVerticalGrid(
             modifier = modifier,
             state = gridState,
-            columns = GridCells.Fixed(4),
-            contentPadding = PaddingValues(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            columns = GridCells.Fixed(HOME_GRID_COLUMNS),
+            contentPadding = PaddingValues(SBVSpacing.xl),
+            horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl),
+            verticalArrangement = Arrangement.spacedBy(SBVSpacing.md)
         ) {
             itemsIndexed(
                 items = dynamicViewModel.dynamicList,
-                key = { index, _ -> index }
-            ) { _, item ->
+                key = { _, item -> item.dynamicId }
+            ) { index, item ->
+                val gridFocusModifier = Modifier.homeGridFocus(
+                    index = index,
+                    itemCount = dynamicViewModel.dynamicList.size,
+                    navFocusRequester = navFocusRequester,
+                )
                 SmallVideoCard(
+                    modifier = gridFocusModifier,
+                    actionModifier = Modifier.homeGridActionFocus(
+                        index = index,
+                        navFocusRequester = navFocusRequester,
+                    ),
                     data = remember(item) {         // `VideoCardData` 只在 item 变动时重建
                         VideoCardData(
                             avid = item.aid,
@@ -96,17 +108,9 @@ fun DynamicsScreen(
                 )
             }
 
-            if (dynamicViewModel.loading)
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingTip()
-                    }
-                }
-
-            if (!dynamicViewModel.hasMore)
+            if (dynamicViewModel.loading) {
+                loadingTipItem()
+            } else if (!dynamicViewModel.hasMore) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         modifier = Modifier
@@ -116,6 +120,7 @@ fun DynamicsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
         }
     } else {
         Box(

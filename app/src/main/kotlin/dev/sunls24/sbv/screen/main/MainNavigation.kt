@@ -11,11 +11,6 @@ sealed interface MainDestination {
         override val displayName = tab.getDisplayName()
     }
 
-    data object Ugc : MainDestination {
-        override val section = MainSection.Ugc
-        override val displayName = "分区"
-    }
-
     data object Personal : MainDestination {
         override val section = MainSection.Personal
         override val displayName = "个人"
@@ -29,7 +24,6 @@ sealed interface MainDestination {
 
 enum class MainSection {
     Home,
-    Ugc,
     Personal,
     Search,
 }

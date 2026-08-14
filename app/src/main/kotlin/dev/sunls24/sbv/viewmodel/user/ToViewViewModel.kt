@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import dev.sunls24.biliapi.http.entity.AuthFailureException
 import dev.sunls24.biliapi.repositories.ToViewRepository
 import dev.sunls24.sbv.SBVApp
-import dev.sunls24.sbv.BuildConfig
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.entity.carddata.VideoCardData
 import dev.sunls24.sbv.repository.UserRepository
@@ -115,7 +114,7 @@ class ToViewViewModel(
                         SBVApp.context.getString(R.string.exception_auth_failure)
                             .toast(SBVApp.context)
                     }
-                    if (!BuildConfig.DEBUG) userRepository.logout()
+                    userRepository.logout()
                 }
 
                 else -> {}

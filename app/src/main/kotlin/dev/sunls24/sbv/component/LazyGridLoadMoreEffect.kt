@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.filter
 fun LazyGridLoadMoreEffect(
     gridState: LazyGridState,
     itemCount: Int,
-    preloadCount: Int = 20,
+    preloadCount: Int = 8,
     contentKey: Any? = Unit,
     onLoadMore: () -> Unit
 ) {

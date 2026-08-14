@@ -1,7 +1,6 @@
 package dev.sunls24.sbv.screen.settings.content
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -21,6 +20,8 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import dev.sunls24.sbv.component.settings.SettingsMenuSelectItem
+import dev.sunls24.sbv.tv.component.TvDialogDefaults
+import dev.sunls24.sbv.tv.component.tvDialogWidth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +40,13 @@ fun <T : Enum<T>> OptionDialog(
     }
 
     BasicAlertDialog(
-        modifier = modifier.padding(vertical = 24.dp),
-        onDismissRequest = onDismiss
+        modifier = modifier.padding(vertical = TvDialogDefaults.verticalPadding),
+        onDismissRequest = onDismiss,
+        properties = TvDialogDefaults.properties,
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
+                .tvDialogWidth()
                 .wrapContentHeight(),
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface,
@@ -54,7 +56,7 @@ fun <T : Enum<T>> OptionDialog(
                 modifier = Modifier
                     .wrapContentHeight()
                     .heightIn(max = maxHeightDp)
-                    .padding(24.dp),
+                    .padding(TvDialogDefaults.contentPadding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {

@@ -1,5 +1,6 @@
 package dev.sunls24.sbv.screen.user
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -42,7 +43,10 @@ import dev.sunls24.sbv.R
 import dev.sunls24.sbv.activities.video.UpInfoActivity
 import dev.sunls24.sbv.component.LoadingTip
 import dev.sunls24.sbv.component.TvLazyVerticalGrid
+import dev.sunls24.sbv.ui.theme.SBVFocus
 import dev.sunls24.sbv.ui.theme.SBVTheme
+import dev.sunls24.sbv.util.ImageSize
+import dev.sunls24.sbv.util.resizedImageUrl
 import dev.sunls24.sbv.util.requestFocus
 import dev.sunls24.sbv.viewmodel.user.FollowViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -84,7 +88,7 @@ fun FollowScreen(
                 ) {
                     Text(
                         text = stringResource(R.string.user_homepage_follow),
-                        fontSize = 24.sp
+                        style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
                         text = stringResource(
@@ -102,10 +106,13 @@ fun FollowScreen(
             columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
+            horizontalArrangement = Arrangement.spacedBy(28.dp)
         ) {
             if (followViewModel.followedUsers.isNotEmpty()) {
-                itemsIndexed(items = followViewModel.followedUsers) { index, up ->
+                itemsIndexed(
+                    items = followViewModel.followedUsers,
+                    key = { _, up -> up.mid },
+                ) { index, up ->
                     val upCardModifier =
                         if (index == 0) Modifier.focusRequester(defaultFocusRequester) else Modifier
                     UpCard(
@@ -191,7 +198,17 @@ fun UpCard(
             focusedContainerColor = MaterialTheme.colorScheme.surface,
             pressedContainerColor = MaterialTheme.colorScheme.surface
         ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = SBVFocus.focusedScale),
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.large),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(
+                    width = SBVFocus.borderWidth,
+                    color = MaterialTheme.colorScheme.border
+                ),
+                shape = MaterialTheme.shapes.large
+            )
+        ),
         onClick = onClick,
         onLongClick = onLongClick
     ) {
@@ -210,7 +227,7 @@ fun UpCard(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape),
-                    model = face,
+                    model = face.resizedImageUrl(ImageSize.Avatar),
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds
                 )

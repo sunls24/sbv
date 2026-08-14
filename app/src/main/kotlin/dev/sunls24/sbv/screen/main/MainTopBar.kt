@@ -1,8 +1,7 @@
 package dev.sunls24.sbv.screen.main
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -41,28 +42,31 @@ import coil3.compose.AsyncImage
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.component.HomeTopNavItem
 import dev.sunls24.sbv.ui.theme.SBVSpacing
+import dev.sunls24.sbv.util.ImageSize
+import dev.sunls24.sbv.util.resizedImageUrl
+
+private val TopBarAvatarSize = 38.dp
 
 @Composable
 fun MainTopBar(
     modifier: Modifier = Modifier,
-    selectedDestination: MainDestination,
+    selectedDestination: MainDestination.Home,
     isLogin: Boolean,
     avatar: String,
     homeFocusRequester: FocusRequester,
+    searchFocusRequester: FocusRequester,
     avatarFocusRequester: FocusRequester,
-    onDestinationChanged: (MainDestination) -> Unit,
+    onDestinationChanged: (MainDestination.Home) -> Unit,
+    onDestinationClick: (MainDestination.Home) -> Unit,
+    onSearchClick: () -> Unit,
     onAvatarClick: () -> Unit,
     onFocusToContent: () -> Boolean,
 ) {
     val homeItems = remember {
         listOf(HomeTopNavItem.Recommend, HomeTopNavItem.Popular, HomeTopNavItem.Dynamics)
     }
-    val homeDestinations = remember(homeItems) { homeItems.map(MainDestination::Home) }
-    val routeDestinations = remember {
-        listOf(MainDestination.Ugc, MainDestination.Search)
-    }
-    val selectedHomeIndex = homeDestinations.indexOf(selectedDestination)
-    val selectedRouteIndex = routeDestinations.indexOf(selectedDestination)
+    val destinations = remember(homeItems) { homeItems.map(MainDestination::Home) }
+    val selectedIndex = destinations.indexOf(selectedDestination)
 
     Surface(
         modifier = modifier
@@ -79,100 +83,89 @@ fun MainTopBar(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SBVSpacing.xl, vertical = SBVSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = SBVSpacing.xl, vertical = SBVSpacing.xs),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
+            Icon(
                 modifier = Modifier
-                    .weight(1f),
-                contentAlignment = Alignment.Center,
+                    .align(Alignment.CenterStart)
+                    .size(48.dp),
+                painter = painterResource(R.drawable.ic_sbv_logo),
+                tint = Color.Unspecified,
+                contentDescription = "SBV",
+            )
+
+            MainTopTabRow(
+                destinations = destinations,
+                selectedIndex = selectedIndex,
+                selectedFocusRequester = homeFocusRequester,
+                searchFocusRequester = searchFocusRequester,
+                onFocus = { onDestinationChanged(destinations[it]) },
+                onClick = { onDestinationClick(destinations[it]) },
+            )
+
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                horizontalArrangement = Arrangement.spacedBy(SBVSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                IconButton(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .focusRequester(searchFocusRequester)
+                        .focusProperties {
+                            left = homeFocusRequester
+                            right = avatarFocusRequester
+                        },
+                    onClick = onSearchClick,
                 ) {
-                    MainTopTabRow(
-                        labels = homeDestinations.map { it.displayName },
-                        selectedIndex = selectedHomeIndex,
-                        showIndicator = selectedHomeIndex >= 0,
-                        indicatorStyle = MainTopBarIndicatorStyle.Pill,
-                        selectedFocusRequester = homeFocusRequester,
-                        onFocus = { onDestinationChanged(homeDestinations[it]) },
-                        onClick = { onDestinationChanged(homeDestinations[it]) },
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = SBVSpacing.lg, vertical = SBVSpacing.sm)
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(MaterialTheme.colorScheme.borderVariant),
-                    )
-
-                    MainTopTabRow(
-                        labels = routeDestinations.map { it.displayName },
-                        selectedIndex = selectedRouteIndex,
-                        showIndicator = selectedRouteIndex >= 0,
-                        indicatorStyle = MainTopBarIndicatorStyle.Underline,
-                        onFocus = { onDestinationChanged(routeDestinations[it]) },
-                        onClick = { onDestinationChanged(routeDestinations[it]) },
+                    Icon(
+                        modifier = Modifier.size(24.dp),
+                        painter = painterResource(R.drawable.ic_symbol_search_filled),
+                        contentDescription = "搜索",
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.width(SBVSpacing.lg))
-
-            IconButton(
-                modifier = Modifier
-                    .size(56.dp)
-                    .focusRequester(avatarFocusRequester)
-                    .then(
-                        if (selectedDestination == MainDestination.Personal) {
-                            Modifier.border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = CircleShape,
-                            )
-                        } else {
-                            Modifier
+                IconButton(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .focusRequester(avatarFocusRequester)
+                        .focusProperties {
+                            left = searchFocusRequester
                         },
-                    ),
-                onClick = onAvatarClick,
-            ) {
-                if (isLogin && avatar.isNotBlank()) {
-                    AsyncImage(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape),
-                        model = avatar,
-                        contentDescription = "个人菜单",
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_symbol_account_circle_filled),
-                        contentDescription = "登录和个人菜单",
-                    )
+                    onClick = onAvatarClick,
+                ) {
+                    if (isLogin && avatar.isNotBlank()) {
+                        AsyncImage(
+                            modifier = Modifier
+                                .size(TopBarAvatarSize)
+                                .clip(CircleShape),
+                            model = avatar.resizedImageUrl(ImageSize.Avatar),
+                            contentDescription = "个人菜单",
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Icon(
+                            modifier = Modifier.size(TopBarAvatarSize),
+                            painter = painterResource(R.drawable.ic_symbol_account_circle_filled),
+                            contentDescription = "登录和个人菜单",
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-private enum class MainTopBarIndicatorStyle {
-    Pill,
-    Underline,
-}
-
 @Composable
 private fun MainTopTabRow(
-    labels: List<String>,
+    destinations: List<MainDestination>,
     selectedIndex: Int,
-    showIndicator: Boolean,
-    indicatorStyle: MainTopBarIndicatorStyle,
-    selectedFocusRequester: FocusRequester? = null,
+    selectedFocusRequester: FocusRequester,
+    searchFocusRequester: FocusRequester,
     onFocus: (Int) -> Unit,
     onClick: (Int) -> Unit,
 ) {
@@ -180,48 +173,47 @@ private fun MainTopTabRow(
         selectedTabIndex = selectedIndex.coerceAtLeast(0),
         separator = { Spacer(modifier = Modifier.width(SBVSpacing.sm)) },
         indicator = { tabPositions, doesTabRowHaveFocus ->
-            if (showIndicator) tabPositions.getOrNull(selectedIndex)?.let { position ->
-                when (indicatorStyle) {
-                    MainTopBarIndicatorStyle.Pill -> TabRowDefaults.PillIndicator(
-                        currentTabPosition = position,
-                        doesTabRowHaveFocus = doesTabRowHaveFocus,
-                        activeColor = MaterialTheme.colorScheme.primary,
-                        inactiveColor = MaterialTheme.colorScheme.primaryContainer,
-                    )
-
-                    MainTopBarIndicatorStyle.Underline -> TabRowDefaults.UnderlinedIndicator(
-                        currentTabPosition = position,
-                        doesTabRowHaveFocus = doesTabRowHaveFocus,
-                        activeColor = MaterialTheme.colorScheme.primary,
-                        inactiveColor = MaterialTheme.colorScheme.secondary,
-                    )
-                }
+            tabPositions.getOrNull(selectedIndex)?.let { position ->
+                TabRowDefaults.UnderlinedIndicator(
+                    currentTabPosition = position,
+                    doesTabRowHaveFocus = doesTabRowHaveFocus,
+                )
             }
         },
     ) {
-        labels.forEachIndexed { index, label ->
+        destinations.forEachIndexed { index, destination ->
             Tab(
-                modifier = if (index == selectedIndex && selectedFocusRequester != null) {
-                    Modifier.focusRequester(selectedFocusRequester)
-                } else {
-                    Modifier
-                },
+                modifier = Modifier
+                    .then(
+                        if (index == selectedIndex) {
+                            Modifier.focusRequester(selectedFocusRequester)
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .focusProperties {
+                        if (index == destinations.lastIndex) {
+                            right = searchFocusRequester
+                        }
+                    },
                 selected = index == selectedIndex,
-                colors = when (indicatorStyle) {
-                    MainTopBarIndicatorStyle.Pill -> TabDefaults.pillIndicatorTabColors()
-                    MainTopBarIndicatorStyle.Underline -> TabDefaults.underlinedIndicatorTabColors()
-                },
+                colors = TabDefaults.underlinedIndicatorTabColors(),
                 onFocus = { onFocus(index) },
                 onClick = { onClick(index) },
             ) {
-                Text(
-                    modifier = Modifier.padding(
-                        horizontal = SBVSpacing.lg,
-                        vertical = SBVSpacing.sm,
-                    ),
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                )
+                Box(
+                    modifier = Modifier.height(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        modifier = Modifier.padding(
+                            horizontal = SBVSpacing.lg,
+                            vertical = SBVSpacing.sm,
+                        ),
+                        text = destination.displayName,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
         }
     }

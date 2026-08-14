@@ -1,21 +1,17 @@
 package dev.sunls24.sbv.component.search
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.DenseListItem
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImagePainter
-import coil3.compose.rememberAsyncImagePainter
-import coil3.request.ImageRequest
-import coil3.size.Size
+import coil3.compose.AsyncImage
+import dev.sunls24.sbv.util.ImageSize
+import dev.sunls24.sbv.util.resizedImageUrl
 
 @Composable
 fun SearchKeyword(
@@ -25,17 +21,7 @@ fun SearchKeyword(
     trailingIcon: @Composable() (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    val painter = rememberAsyncImagePainter(
-        ImageRequest.Builder(context)
-            .data(data = leadingIcon)
-            .size(Size.ORIGINAL)
-            .build(),
-        contentScale = ContentScale.FillHeight
-    )
-    val painterState by painter.state.collectAsState()
-
-    if (leadingIcon != "" && painterState is AsyncImagePainter.State.Success) {
+    if (leadingIcon.isNotBlank()) {
         DenseListItem(
             modifier = modifier,
             selected = false,
@@ -43,15 +29,17 @@ fun SearchKeyword(
             headlineContent = {
                 Text(
                     text = keyword,
+                    style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             },
             leadingContent = {
-                Image(
-                    modifier = Modifier.height(16.dp),
-                    painter = painter,
+                AsyncImage(
+                    modifier = Modifier.size(16.dp),
+                    model = leadingIcon.resizedImageUrl(ImageSize.Icon),
                     contentDescription = null,
+                    contentScale = ContentScale.Fit,
                 )
             },
             trailingContent = trailingIcon
@@ -64,6 +52,7 @@ fun SearchKeyword(
             headlineContent = {
                 Text(
                     text = keyword,
+                    style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

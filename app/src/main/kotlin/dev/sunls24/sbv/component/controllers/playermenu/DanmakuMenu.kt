@@ -96,7 +96,7 @@ fun DanmakuMenuList(
                 VideoPlayerDanmakuMenuItem.Opacity -> PresetMenuItem(
                     modifier = menuItemsModifier,
                     value = currentOpacity,
-                    values = PERCENTAGE_PRESETS,
+                    values = DANMAKU_PERCENTAGE_PRESETS,
                     text = NumberFormat.getPercentInstance()
                         .apply { maximumFractionDigits = 0 }
                         .format(currentOpacity),
@@ -119,7 +119,7 @@ fun DanmakuMenuList(
                 VideoPlayerDanmakuMenuItem.Area -> PresetMenuItem(
                     modifier = menuItemsModifier,
                     value = currentArea,
-                    values = PERCENTAGE_PRESETS,
+                    values = DANMAKU_PERCENTAGE_PRESETS,
                     text = NumberFormat.getPercentInstance()
                         .apply { maximumFractionDigits = 0 }
                         .format(currentArea),
@@ -165,5 +165,5 @@ fun DanmakuMenuList(
     }
 }
 
-private val DANMAKU_SCALE_PRESETS = (50..200 step 25).map { it / 100f }
-private val PERCENTAGE_PRESETS = (0..100 step 10).map { it / 100f }
+private val DANMAKU_SCALE_PRESETS = (100..200 step 20).map { it / 100f }
+private val DANMAKU_PERCENTAGE_PRESETS = (10..100 step 10).map { it / 100f }

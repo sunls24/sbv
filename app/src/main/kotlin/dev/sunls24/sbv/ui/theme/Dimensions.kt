@@ -14,4 +14,9 @@ internal object SBVSpacing {
 
 internal object SBVFocus {
     val borderWidth = 3.dp
+    const val focusedScale = 1.05f
+}
+
+internal object SBVSize {
+    val searchPanelWidth = 320.dp
 }

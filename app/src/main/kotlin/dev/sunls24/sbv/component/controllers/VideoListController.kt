@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.DenseListItem
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
@@ -61,7 +62,7 @@ fun VideoListController(
         ) {
             Box(
                 modifier = Modifier
-                    .width(300.dp)
+                    .width(360.dp)
                     .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
@@ -86,6 +87,7 @@ fun VideoListController(
                             headlineContent = {
                                 Text(
                                     text = video.title,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )

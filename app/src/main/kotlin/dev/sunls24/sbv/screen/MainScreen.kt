@@ -28,8 +28,8 @@ import dev.sunls24.sbv.screen.main.MainDestination
 import dev.sunls24.sbv.screen.main.MainSection
 import dev.sunls24.sbv.screen.main.MainTopBar
 import dev.sunls24.sbv.screen.main.PersonalContent
-import dev.sunls24.sbv.screen.main.UgcContent
 import dev.sunls24.sbv.screen.search.SearchInputScreen
+import dev.sunls24.sbv.screen.search.SearchResultScreen
 import dev.sunls24.sbv.ui.effect.UiEffect
 import dev.sunls24.sbv.util.Prefs
 import dev.sunls24.sbv.util.toast
@@ -52,10 +52,17 @@ fun MainScreen(
     val context = LocalContext.current
     var showUserPanel by remember { mutableStateOf(false) }
     var restoreAvatarFocus by remember { mutableStateOf(false) }
+    var restoreAvatarAfterPanelDismiss by remember { mutableStateOf(true) }
     var lastPressBack: Long by remember { mutableLongStateOf(0L) }
+    var homeRefreshRequest by remember { mutableLongStateOf(0L) }
+    var searchResultKeyword by remember { mutableStateOf<String?>(null) }
     var selectedDestination by remember {
         mutableStateOf<MainDestination>(MainDestination.Home(Prefs.firstHomeTopNavItem))
     }
+    var lastHomeDestination by remember {
+        mutableStateOf(MainDestination.Home(Prefs.firstHomeTopNavItem))
+    }
+    var pendingHomeFocus by remember { mutableStateOf<MainSection?>(null) }
     val selectedSection = selectedDestination.section
     val isLogin by userViewModel.isLoginFlow.collectAsState()
 
@@ -63,15 +70,14 @@ fun MainScreen(
     val homeContentFocusRequester = remember { FocusRequester() }
     val homeNavigationFocusRequester = remember { FocusRequester() }
     val avatarFocusRequester = remember { FocusRequester() }
-    val ugcFocusRequester = remember { FocusRequester() }
-    val searchFocusRequester = remember { FocusRequester() }
+    val searchActionFocusRequester = remember { FocusRequester() }
+    val searchInputFocusRequester = remember { FocusRequester() }
 
     val onFocusToContent: () -> Boolean = {
         runCatching {
             when (selectedSection) {
                 MainSection.Home -> homeContentFocusRequester.requestFocus()
-                MainSection.Ugc -> ugcFocusRequester.requestFocus()
-                MainSection.Search -> searchFocusRequester.requestFocus()
+                MainSection.Search -> searchInputFocusRequester.requestFocus()
                 MainSection.Personal -> personalFocusRequester.requestFocus()
             }
         }.getOrDefault(false)
@@ -81,10 +87,35 @@ fun MainScreen(
         runCatching { homeNavigationFocusRequester.requestFocus() }
     }
 
+    LaunchedEffect(selectedSection, searchResultKeyword) {
+        when (selectedSection) {
+            MainSection.Personal -> runCatching { personalFocusRequester.requestFocus() }
+            MainSection.Search -> if (searchResultKeyword == null) {
+                runCatching { searchInputFocusRequester.requestFocus() }
+            }
+            MainSection.Home -> Unit
+        }
+    }
+
     LaunchedEffect(showUserPanel) {
-        if (!showUserPanel && restoreAvatarFocus) {
-            avatarFocusRequester.requestFocus()
-            restoreAvatarFocus = false
+        if (!showUserPanel) {
+            if (restoreAvatarFocus) {
+                avatarFocusRequester.requestFocus()
+                restoreAvatarFocus = false
+            } else if (selectedSection == MainSection.Personal) {
+                personalFocusRequester.requestFocus()
+            }
+        }
+    }
+
+    LaunchedEffect(selectedSection, pendingHomeFocus) {
+        if (selectedSection == MainSection.Home) {
+            when (pendingHomeFocus) {
+                MainSection.Personal -> avatarFocusRequester.requestFocus()
+                MainSection.Search -> searchActionFocusRequester.requestFocus()
+                MainSection.Home, null -> Unit
+            }
+            pendingHomeFocus = null
         }
     }
 
@@ -106,6 +137,15 @@ fun MainScreen(
     }
 
     BackHandler(enabled = !showUserPanel) {
+        if (selectedSection == MainSection.Search && searchResultKeyword != null) {
+            searchResultKeyword = null
+            return@BackHandler
+        }
+        if (selectedSection != MainSection.Home) {
+            pendingHomeFocus = selectedSection
+            selectedDestination = lastHomeDestination
+            return@BackHandler
+        }
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastPressBack < 1000 * 3) {
             (context as Activity).finish()
@@ -118,16 +158,37 @@ fun MainScreen(
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
-        MainTopBar(
-            selectedDestination = selectedDestination,
-            isLogin = isLogin,
-            avatar = userViewModel.face,
-            homeFocusRequester = homeNavigationFocusRequester,
-            avatarFocusRequester = avatarFocusRequester,
-            onDestinationChanged = { selectedDestination = it },
-            onAvatarClick = { showUserPanel = true },
-            onFocusToContent = onFocusToContent,
-        )
+        if (selectedDestination is MainDestination.Home) {
+            MainTopBar(
+                selectedDestination = selectedDestination as MainDestination.Home,
+                isLogin = isLogin,
+                avatar = userViewModel.face,
+                homeFocusRequester = homeNavigationFocusRequester,
+                searchFocusRequester = searchActionFocusRequester,
+                avatarFocusRequester = avatarFocusRequester,
+                onDestinationChanged = {
+                    selectedDestination = it
+                    lastHomeDestination = it
+                },
+                onDestinationClick = { destination ->
+                    if (destination == selectedDestination) {
+                        homeRefreshRequest++
+                    } else {
+                        selectedDestination = destination
+                        lastHomeDestination = destination
+                    }
+                },
+                onSearchClick = {
+                    searchResultKeyword = null
+                    selectedDestination = MainDestination.Search
+                },
+                onAvatarClick = {
+                    restoreAvatarAfterPanelDismiss = true
+                    showUserPanel = true
+                },
+                onFocusToContent = onFocusToContent,
+            )
+        }
 
         Box(
             modifier = Modifier
@@ -135,7 +196,20 @@ fun MainScreen(
                 .fillMaxWidth(),
         ) {
             when (selectedSection) {
-                MainSection.Search -> SearchInputScreen(defaultFocusRequester = searchFocusRequester)
+                MainSection.Search -> {
+                    val keyword = searchResultKeyword
+                    if (keyword == null) {
+                        SearchInputScreen(
+                            defaultFocusRequester = searchInputFocusRequester,
+                            onSearchRequest = { searchResultKeyword = it },
+                        )
+                    } else {
+                        SearchResultScreen(
+                            keyword = keyword,
+                            onExit = { searchResultKeyword = null },
+                        )
+                    }
+                }
                 MainSection.Personal -> PersonalContent(
                     navFocusRequester = personalFocusRequester,
                     favouriteViewModel = favoriteViewModel,
@@ -147,10 +221,7 @@ fun MainScreen(
                     navFocusRequester = homeNavigationFocusRequester,
                     contentFocusRequester = homeContentFocusRequester,
                     selectedTab = (selectedDestination as MainDestination.Home).tab,
-                    toViewViewModel = toViewViewModel
-                )
-                MainSection.Ugc -> UgcContent(
-                    navFocusRequester = ugcFocusRequester,
+                    refreshRequest = homeRefreshRequest,
                     toViewViewModel = toViewViewModel
                 )
             }
@@ -158,7 +229,7 @@ fun MainScreen(
 
         if (showUserPanel) {
             val hideUserPanel = {
-                restoreAvatarFocus = true
+                restoreAvatarFocus = restoreAvatarAfterPanelDismiss
                 showUserPanel = false
             }
             UserPanelDialog(
@@ -166,17 +237,6 @@ fun MainScreen(
                 username = userViewModel.username,
                 face = userViewModel.face,
                 level = userViewModel.responseData?.level ?: 0,
-                currentExp = userViewModel.responseData?.levelExp?.currentExp ?: 0,
-                nextLevelExp = with(userViewModel.responseData?.levelExp?.nextExp) {
-                    if (this == null) {
-                        1
-                    } else if (this <= 0) {
-                        userViewModel.responseData?.levelExp?.currentExp ?: 1
-                    } else {
-                        (userViewModel.responseData?.levelExp?.currentExp ?: 1) +
-                            (userViewModel.responseData?.levelExp?.nextExp ?: 0)
-                    }
-                },
                 onHide = hideUserPanel,
                 onLogin = {
                     context.startActivity(Intent(context, LoginActivity::class.java))
@@ -186,6 +246,7 @@ fun MainScreen(
                     context.startActivity(Intent(context, SettingsActivity::class.java))
                 },
                 onOpenPersonal = {
+                    restoreAvatarAfterPanelDismiss = false
                     selectedDestination = MainDestination.Personal
                 },
                 onGoFollowingUp = {

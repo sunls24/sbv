@@ -31,7 +31,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -40,6 +39,7 @@ import dev.sunls24.sbv.R
 import dev.sunls24.sbv.screen.settings.content.AudioVideoSetting
 import dev.sunls24.sbv.screen.settings.content.UISetting
 import dev.sunls24.sbv.ui.theme.SBVTheme
+import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.util.requestFocus
 
 @Composable
@@ -54,10 +54,10 @@ fun SettingsScreen(
         topBar = {
             Box(
                 modifier = Modifier.padding(
-                    start = 48.dp,
-                    top = 24.dp,
-                    bottom = 8.dp,
-                    end = 48.dp
+                    start = SBVSpacing.xxxl,
+                    top = SBVSpacing.xl,
+                    bottom = SBVSpacing.sm,
+                    end = SBVSpacing.xxxl
                 )
             ) {
                 Row(
@@ -67,7 +67,7 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = stringResource(R.string.title_activity_settings),
-                        fontSize = 24.sp
+                        style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
                         text = stringResource(
@@ -124,7 +124,7 @@ fun SettingsNav(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(24.dp),
+        contentPadding = PaddingValues(SBVSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         for (item in SettingsMenuNavItem.entries) {
@@ -161,7 +161,7 @@ fun SettingContent(
 ) {
     Box(
         modifier = modifier
-            .padding(24.dp)
+            .padding(SBVSpacing.xl)
     ) {
         SettingsDetail(
             modifier = Modifier.fillMaxSize(),

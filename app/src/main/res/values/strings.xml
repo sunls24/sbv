@@ -17,19 +17,8 @@
 
     <string name="favorite_dialog_title">选择收藏夹</string>
 
-    <string name="filter_dialog_open_tip">菜单键更改筛选</string>
-    <string name="filter_dialog_open_tip_click">点击打开筛选</string>
-    <string name="filter_dialog_title">筛选</string>
-
     <string name="follow_bangumi_disable_fail">取消追番失败</string>
     <string name="follow_bangumi_enable_fail">追番失败</string>
-
-    <string name="following_season_status_all">全部</string>
-    <string name="following_season_status_want">想看</string>
-    <string name="following_season_status_watched">看过</string>
-    <string name="following_season_status_watching">在看</string>
-    <string name="following_season_type_bangumi">番剧</string>
-    <string name="following_season_type_film_and_television">影视</string>
 
     <string name="home_press_back_again_to_exit">再次按下返回键退出 Bug Video</string>
 
@@ -93,11 +82,9 @@
     <string name="play_speed_x1_5">1.5</string>
     <string name="play_speed_x2">2.0</string>
 
-    <string name="danmaku_speed_factor_x0_5">极慢</string>
-    <string name="danmaku_speed_factor_x0_75">较慢</string>
+    <string name="danmaku_speed_factor_x0_65">慢</string>
     <string name="danmaku_speed_factor_x1">适中</string>
-    <string name="danmaku_speed_factor_x1_25">较快</string>
-    <string name="danmaku_speed_factor_x1_5">极快</string>
+    <string name="danmaku_speed_factor_x1_35">快</string>
 
     <string name="search_input_history">历史记录</string>
     <string name="search_input_history_delete_all_confirm_dialog_cancel_button">手滑了</string>
@@ -110,16 +97,10 @@
     <string name="search_input_soft_keybord_search">搜索</string>
     <string name="search_input_suggest">你可能要找的是</string>
     <string name="search_input_title">搜索</string>
-    <string name="search_result_filter_duration_10_to_30">10–30 分钟</string>
-    <string name="search_result_filter_duration_30_to_60">30–60 分钟</string>
-    <string name="search_result_filter_duration_all">全部时长</string>
-    <string name="search_result_filter_duration_less_than_10">10 分钟以下</string>
-    <string name="search_result_filter_duration_more_than_60">60 分钟以上</string>
-    <string name="search_result_filter_order_type_comprehensive_sort">综合排序</string>
-    <string name="search_result_filter_order_type_latest_publish">最新发布</string>
-    <string name="search_result_filter_order_type_most_clicks">最多点击</string>
-    <string name="search_result_filter_order_type_most_danmaku">最多弹幕</string>
-    <string name="search_result_filter_order_type_most_favorites">最多收藏</string>
+    <string name="video_card_action_watch_later">稍后看</string>
+    <string name="video_card_action_remove_watch_later">移出</string>
+    <string name="video_card_action_detail">详情</string>
+    <string name="video_card_action_up_page">主页</string>
     <string name="search_result_type_name_bili_user">用户</string>
     <string name="search_result_type_name_media_bangumi">番剧</string>
     <string name="search_result_type_name_media_ft">影视</string>
@@ -135,7 +116,7 @@
     <string name="settings_media_software_video_renderer_text">使用软件解码器播放硬解不兼容的视频</string>
     <string name="settings_ui_homepage_text">设置启动时默认显示的主页标签，需重启应用生效</string>
     <string name="settings_ui_homepage_title">更改主页默认标签</string>
-    <string name="settings_ui_personal_page_text">稍后再看/历史/收藏/追番，需重启应用生效</string>
+    <string name="settings_ui_personal_page_text">稍后再看/收藏/历史/追番，需重启应用生效</string>
     <string name="settings_ui_personal_page_title">更改个人页置顶</string>
     <string name="settings_ui_show_persistent_seek_text">播放时在屏幕底部持续显示迷你进度条</string>
     <string name="settings_ui_show_persistent_seek_title">常显播放进度条</string>
@@ -144,32 +125,11 @@
 
     <string name="title_activity_follow">已关注</string>
     <string name="title_activity_login">登录</string>
-    <string name="title_activity_search_result">搜索结果</string>
     <string name="title_activity_season_info">剧集信息</string>
     <string name="title_activity_settings">设置</string>
     <string name="title_activity_up_info">UP 投稿</string>
     <string name="title_activity_video_info">视频信息</string>
     <string name="title_activity_video_player_v3">视频播放</string>
-
-
-
-    <string name="ugc_type_v2_animal">动物</string>
-    <string name="ugc_type_v2_car">汽车</string>
-    <string name="ugc_type_v2_cinephile">影视</string>
-    <string name="ugc_type_v2_dance">舞蹈</string>
-    <string name="ugc_type_v2_douga">动画</string>
-    <string name="ugc_type_v2_ent">娱乐</string>
-    <string name="ugc_type_v2_fashion">时尚美妆</string>
-    <string name="ugc_type_v2_food">美食</string>
-    <string name="ugc_type_v2_game">游戏</string>
-    <string name="ugc_type_v2_information">资讯</string>
-    <string name="ugc_type_v2_kichiku">鬼畜</string>
-    <string name="ugc_type_v2_knowledge">知识</string>
-    <string name="ugc_type_v2_life_joy">生活兴趣</string>
-    <string name="ugc_type_v2_music">音乐</string>
-    <string name="ugc_type_v2_sports">体育运动</string>
-    <string name="ugc_type_v2_tech">科技数码</string>
-
     <string name="user_homepage_follow">已关注</string>
 
     <string name="video_aspect_ratio_default">默认</string>
@@ -182,6 +142,9 @@
     <string name="video_codec_hvc1" tools:ignore="Typos">Dolby Vision (HVC1)</string>
     <string name="video_info_argue_tip_vertical_screen">温馨提示：该稿件包含竖屏视频内容</string>
     <string name="video_info_argue_tip_upower_exclusive">温馨提示：该稿件为充电专属视频</string>
+    <string name="video_info_action_like">点赞</string>
+    <string name="video_info_action_coin">投币</string>
+    <string name="video_info_action_favorite">收藏</string>
     <string name="video_info_description_title">视频简介</string>
     <string name="video_info_follow">关注</string>
     <string name="video_info_followed">已关注</string>
@@ -207,6 +170,12 @@
     <string name="video_player_menu_subtitle_bottom_padding">底部间距</string>
     <string name="video_player_menu_subtitle_size">字体大小</string>
     <string name="video_player_menu_subtitle_switch">选择字幕</string>
+    <string name="video_player_control_play">播放</string>
+    <string name="video_player_control_pause">暂停</string>
+    <string name="video_player_control_danmaku">弹幕</string>
+    <string name="video_player_control_settings">设置</string>
+    <string name="video_player_control_related">相关</string>
+    <string name="video_player_control_loop">循环</string>
     <string name="video_player_press_back_again_to_exit">再次按下返回键退出播放</string>
     <string name="video_player_referer">https://www.bilibili.com</string>
     <string name="video_player_user_agent_http">Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36</string>

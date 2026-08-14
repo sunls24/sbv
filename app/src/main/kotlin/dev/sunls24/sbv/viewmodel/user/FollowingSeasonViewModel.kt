@@ -2,13 +2,10 @@ package dev.sunls24.sbv.viewmodel.user
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.sunls24.biliapi.entity.season.FollowingSeason
-import dev.sunls24.biliapi.entity.season.FollowingSeasonStatus
-import dev.sunls24.biliapi.entity.season.FollowingSeasonType
 import dev.sunls24.biliapi.repositories.AuthRepository
 import dev.sunls24.biliapi.repositories.SeasonRepository
 import kotlinx.coroutines.CancellationException
@@ -24,15 +21,10 @@ class FollowingSeasonViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
     val followingSeasons = mutableStateListOf<FollowingSeason>()
-    var followingSeasonType by mutableStateOf(FollowingSeasonType.Bangumi)
-        private set
-    var followingSeasonStatus by mutableStateOf(FollowingSeasonStatus.All)
-        private set
 
     private var pageNumber = 1
     private val pageSize = 20
-    var noMore by mutableStateOf(false)
-        private set
+    private var noMore = false
 
     private var updateJob: Job? = null
     private var requestVersion = 0
@@ -40,17 +32,6 @@ class FollowingSeasonViewModel(
 
     fun ensureLoaded() {
         if (!initialized) loadMore()
-    }
-
-    fun updateFilter(
-        type: FollowingSeasonType = followingSeasonType,
-        status: FollowingSeasonStatus = followingSeasonStatus
-    ) {
-        if (type == followingSeasonType && status == followingSeasonStatus) return
-        followingSeasonType = type
-        followingSeasonStatus = status
-        clearData()
-        loadMore()
     }
 
     fun clearData() {
@@ -66,16 +47,12 @@ class FollowingSeasonViewModel(
     fun loadMore() {
         if (!authRepository.isLoggedIn || updateJob?.isActive == true || noMore) return
         val requestedPage = pageNumber
-        val requestedType = followingSeasonType
-        val requestedStatus = followingSeasonStatus
         val version = ++requestVersion
 
         updateJob = viewModelScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
                     seasonRepository.getFollowingSeasons(
-                        type = requestedType,
-                        status = requestedStatus,
                         pageNumber = requestedPage,
                         pageSize = pageSize,
                     )

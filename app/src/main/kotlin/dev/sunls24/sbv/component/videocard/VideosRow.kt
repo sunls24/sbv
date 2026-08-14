@@ -1,6 +1,5 @@
 package dev.sunls24.sbv.component.videocard
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,11 +21,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.component.ifElse
 import dev.sunls24.sbv.entity.carddata.VideoCardData
+import dev.sunls24.sbv.ui.theme.focusedTextColor
 
 @Composable
 fun VideosRow(
@@ -41,15 +40,7 @@ fun VideosRow(
     val focusRequester = remember { FocusRequester() }
     val density = LocalDensity.current
     var hasFocus by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val titleFontSize by animateFloatAsState(
-        targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
-    )
+    val titleColor = focusedTextColor(hasFocus)
     var rowHeight by remember { mutableStateOf(0.dp) }
 
     Column(
@@ -58,7 +49,7 @@ fun VideosRow(
         Text(
             modifier = Modifier.padding(start = 50.dp),
             text = header,
-            fontSize = titleFontSize.sp,
+            style = MaterialTheme.typography.titleLarge,
             color = titleColor
         )
         LazyRow(
@@ -74,12 +65,16 @@ fun VideosRow(
             verticalAlignment = Alignment.Top,
             contentPadding = PaddingValues(horizontal = 62.dp)
         ) {
-            itemsIndexed(items = videos) { index, videoData ->
+            itemsIndexed(
+                items = videos,
+                key = { _, video -> video.avid },
+            ) { index, videoData ->
                 SmallVideoCard(
                     modifier = Modifier
-                        .width(200.dp)
+                        .width(224.dp)
                         .ifElse(index == 0, Modifier.focusRequester(focusRequester)),
                     data = videoData,
+                    compactActions = true,
                     onClick = { onVideoClicked(videoData) },
                     onAddWatchLater = onAddWatchLater?.let { { it(videoData.avid) } },
                     onGoToDetailPage = onGoToDetailPage?.let { { it(videoData.avid) } },

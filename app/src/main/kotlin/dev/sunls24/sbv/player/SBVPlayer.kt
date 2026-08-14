@@ -2,15 +2,12 @@ package dev.sunls24.sbv.player
 
 import android.content.Context
 import androidx.annotation.OptIn
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaLibraryInfo
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.MediaSource
@@ -102,34 +99,8 @@ class SBVPlayer(
         get() = player.playbackParameters.speed
         set(value) = player.setPlaybackSpeed(value)
 
-    val videoWidth: Int
-        get() = player.videoSize.width
-
-    val videoHeight: Int
-        get() = player.videoSize.height
-
-    val debugInfo: String
-        get() = """
-            player: ${MediaLibraryInfo.VERSION_SLASHY}
-            time: ${currentPosition.formatMinSec()} / ${duration.formatMinSec()}
-            buffered: $bufferedPercentage%
-            resolution: $videoWidth x $videoHeight
-            audio: ${player.audioFormat?.bitrate ?: 0} kbps
-            video codec: ${player.videoFormat?.sampleMimeType ?: "null"}
-            audio codec: ${player.audioFormat?.sampleMimeType ?: "null"} (${audioRendererName()})
-        """.trimIndent()
-
     private fun createMediaSource(url: String): MediaSource =
         ProgressiveMediaSource.Factory(dataSourceFactory)
             .createMediaSource(MediaItem.fromUri(url))
 
-    private fun audioRendererName(): String {
-        for (index in 0 until player.rendererCount) {
-            val renderer = player.getRenderer(index)
-            if (renderer.trackType == C.TRACK_TYPE_AUDIO && renderer.state == Renderer.STATE_STARTED) {
-                return renderer.name
-            }
-        }
-        return "UnknownRenderer"
-    }
 }

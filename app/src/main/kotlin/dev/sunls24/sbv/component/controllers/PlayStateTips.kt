@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -107,7 +106,7 @@ fun BufferingTip(
             Text(
                 modifier = Modifier,
                 text = "缓冲中...$speed",
-                fontSize = 24.sp
+                style = MaterialTheme.typography.titleLarge,
             )
         }
     }

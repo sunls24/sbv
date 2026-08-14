@@ -7,7 +7,6 @@ import dev.sunls24.biliapi.http.entity.danmaku.DanmakuResponse
 import dev.sunls24.biliapi.http.entity.dynamic.DynamicData
 import dev.sunls24.biliapi.http.entity.history.HistoryData
 import dev.sunls24.biliapi.http.entity.home.RcmdTopData
-import dev.sunls24.biliapi.http.entity.region.RegionFeedRcmd
 import dev.sunls24.biliapi.http.entity.search.KeywordSuggest
 import dev.sunls24.biliapi.http.entity.search.SearchResultData
 import dev.sunls24.biliapi.http.entity.search.WebSearchSquareData
@@ -851,18 +850,17 @@ object BiliHttpApi {
         keyword: String,
         type: String,
         page: Int = 1,
-        tid: Int? = null,
-        order: String? = null,
-        duration: Int? = null,
-        buvid3: String? = null
+        buvid3: String? = null,
+        sessData: String? = null,
     ): BiliResponse<SearchResultData> = client.get("/x/web-interface/wbi/search/type") {
         parameter("keyword", keyword)
         parameter("search_type", type)
         parameter("page", page)
-        tid?.let { parameter("tids", it) }
-        order?.let { parameter("order", it) }
-        duration?.let { parameter("duration", it) }
-        header("Cookie", "buvid3=$buvid3;")
+        val cookieHeader = buildList {
+            buvid3?.takeIf(String::isNotBlank)?.let { add("buvid3=$it;") }
+            sessData?.takeIf(String::isNotBlank)?.let { add("SESSDATA=$it;") }
+        }.joinToString(" ")
+        if (cookieHeader.isNotEmpty()) header(HttpHeaders.Cookie, cookieHeader)
         header("referer", "https://search.bilibili.com/")
     }.body()
 
@@ -909,7 +907,10 @@ object BiliHttpApi {
             if (!needsUpdate) return
 
             try {
-                val wbiData = getWebInterfaceNav(cookieHeader).getResponseData().wbiImg
+                val navResponse = getWebInterfaceNav(cookieHeader)
+                val wbiData = requireNotNull(navResponse.data ?: navResponse.result) {
+                    "WBI nav response data is null: ${navResponse.message}"
+                }.wbiImg
                 wbiImgKey = wbiData.getImgKey()
                 wbiSubKey = wbiData.getSubKey()
                 wbiLastRefreshDate = now
@@ -961,19 +962,4 @@ object BiliHttpApi {
 
     suspend fun downloadText(url: String): String = client.get(url).bodyAsText()
 
-    suspend fun getRegionFeedRcmd(
-        displayId: Int,
-        requestCnt: Int = 15,
-        fromRegion: Int,
-        device: String = "web",
-        plat: Int = 30,
-        sessData: String? = null
-    ): BiliResponse<RegionFeedRcmd> = client.get("/x/web-interface/region/feed/rcmd") {
-        parameter("display_id", displayId)
-        parameter("request_cnt", requestCnt)
-        parameter("from_region", fromRegion)
-        parameter("device", device)
-        parameter("plat", plat)
-        sessData?.let { header("Cookie", "SESSDATA=$it;") }
-    }.body()
 }

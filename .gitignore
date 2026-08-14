@@ -4,6 +4,8 @@
 .DS_Store
 /build
 **/build/
+.kotlin/
+.impeccable/
 /captures
 .externalNativeBuild
 .cxx

@@ -15,12 +15,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import dev.sunls24.sbv.ui.theme.SBVColorTokens
 import dev.sunls24.sbv.ui.theme.SBVFocus
 import dev.sunls24.sbv.ui.theme.SBVShapeTokens
+
+fun Modifier.firstRowActionFocus(
+    index: Int,
+    columns: Int,
+    focusRequester: FocusRequester,
+): Modifier = focusProperties {
+    if (index < columns) {
+        up = focusRequester
+    }
+}
 
 /**
  * 获取到焦点时显示白色边框（带可选动画闪烁）

@@ -542,7 +542,7 @@ class VideoPlayerV3ViewModel(
         seekerUpdateJob = viewModelScope.launch(Dispatchers.Main) {
             while (isActive) {
                 updateSeekerState()
-                delay(100)
+                delay(1000)
             }
         }
     }
@@ -1012,7 +1012,6 @@ class VideoPlayerV3ViewModel(
                 totalDuration = duration,
                 currentTime = currentPos,
                 bufferedPercentage = player.bufferedPercentage,
-                debugInfo = player.debugInfo
             )
         }
     }

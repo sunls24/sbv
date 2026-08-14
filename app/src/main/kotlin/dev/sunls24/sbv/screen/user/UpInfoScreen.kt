@@ -17,11 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.activities.video.VideoInfoActivity
@@ -30,6 +29,7 @@ import dev.sunls24.sbv.component.LazyGridLoadMoreEffect
 import dev.sunls24.sbv.component.TvLazyVerticalGrid
 import dev.sunls24.sbv.component.videocard.SmallVideoCard
 import dev.sunls24.sbv.ui.effect.UiEffect
+import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.util.toast
 import dev.sunls24.sbv.viewmodel.user.ToViewViewModel
 import dev.sunls24.sbv.viewmodel.user.UpInfoViewModel
@@ -77,7 +77,12 @@ fun UpSpaceScreen(
         modifier = modifier,
         topBar = {
             Box(
-                modifier = Modifier.padding(start = 48.dp, top = 24.dp, bottom = 8.dp, end = 48.dp)
+                modifier = Modifier.padding(
+                    start = SBVSpacing.xxxl,
+                    top = SBVSpacing.xl,
+                    bottom = SBVSpacing.sm,
+                    end = SBVSpacing.xxxl
+                )
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -86,7 +91,7 @@ fun UpSpaceScreen(
                 ) {
                     Text(
                         text = upInfoViewModel.upName,
-                        fontSize = 24.sp
+                        style = MaterialTheme.typography.titleLarge,
                     )
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -96,12 +101,12 @@ fun UpSpaceScreen(
                                 R.string.load_data_count,
                                 upInfoViewModel.spaceVideos.size
                             ),
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         AnimatedVisibility(visible = upInfoViewModel.noMore) {
                             Text(
                                 text = stringResource(R.string.load_data_no_more),
-                                color = Color.White.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -113,9 +118,9 @@ fun UpSpaceScreen(
             modifier = Modifier.padding(innerPadding),
             columns = GridCells.Fixed(4),
             state = gridState,
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
+            contentPadding = PaddingValues(SBVSpacing.xl),
+            verticalArrangement = Arrangement.spacedBy(SBVSpacing.xl),
+            horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl)
         ) {
             if (upInfoViewModel.spaceVideos.isNotEmpty()) {
                 itemsIndexed(

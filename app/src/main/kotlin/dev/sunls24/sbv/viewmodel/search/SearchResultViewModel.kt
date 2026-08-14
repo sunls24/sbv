@@ -1,18 +1,21 @@
 package dev.sunls24.sbv.viewmodel.search
 
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import dev.sunls24.biliapi.repositories.SearchFilterDuration
-import dev.sunls24.biliapi.repositories.SearchFilterOrderType
 import dev.sunls24.biliapi.repositories.SearchRepository
 import dev.sunls24.biliapi.repositories.SearchType
 import dev.sunls24.biliapi.repositories.SearchTypePage
 import dev.sunls24.biliapi.repositories.SearchTypeResult
-import dev.sunls24.sbv.util.Partition
+import dev.sunls24.sbv.entity.carddata.SeasonCardData
+import dev.sunls24.sbv.entity.carddata.VideoCardData
+import dev.sunls24.sbv.util.formatHourMinSec
+import dev.sunls24.sbv.util.removeHtmlTags
+import dev.sunls24.sbv.util.toWanString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,15 +33,6 @@ class SearchResultViewModel(
     private var states by mutableStateOf(
         SearchType.entries.associateWith { SearchTypeState(result = SearchResult(it)) }
     )
-
-    var selectedOrder by mutableStateOf(SearchFilterOrderType.ComprehensiveSort)
-        private set
-    var selectedDuration by mutableStateOf(SearchFilterDuration.All)
-        private set
-    var selectedPartition: Partition? by mutableStateOf(null)
-        private set
-    var selectedChildPartition: Partition? by mutableStateOf(null)
-        private set
 
     private val jobs = mutableMapOf<SearchType, Job>()
 
@@ -67,37 +61,6 @@ class SearchResultViewModel(
         loadMore(type)
     }
 
-    fun selectOrder(order: SearchFilterOrderType) {
-        if (selectedOrder == order) return
-        selectedOrder = order
-        reloadVideoSearch()
-    }
-
-    fun selectDuration(duration: SearchFilterDuration) {
-        if (selectedDuration == duration) return
-        selectedDuration = duration
-        reloadVideoSearch()
-    }
-
-    fun selectPartition(partition: Partition?) {
-        if (selectedPartition == partition && selectedChildPartition == null) return
-        selectedPartition = partition
-        selectedChildPartition = null
-        reloadVideoSearch()
-    }
-
-    fun selectChildPartition(partition: Partition?) {
-        if (selectedChildPartition == partition) return
-        selectedChildPartition = partition
-        reloadVideoSearch()
-    }
-
-    private fun reloadVideoSearch() {
-        if (keyword.isBlank()) return
-        reset(SearchType.Video)
-        loadMore(SearchType.Video)
-    }
-
     fun loadMore(type: SearchType) {
         if (keyword.isBlank()) return
         val currentState = state(type)
@@ -106,10 +69,6 @@ class SearchResultViewModel(
         val version = currentState.requestVersion
         val page = currentState.result.page
         val keyword = keyword
-        val tid = selectedChildPartition?.tid ?: selectedPartition?.tid
-        val order = selectedOrder
-        val duration = selectedDuration
-
         updateState(type) {
             it.copy(loadState = SearchLoadState.Loading, updating = true)
         }
@@ -120,18 +79,19 @@ class SearchResultViewModel(
                         keyword = keyword,
                         type = type,
                         page = page,
-                        tid = tid,
-                        order = order,
-                        duration = duration,
                     )
+                }
+                val uiItems = withContext(Dispatchers.Default) {
+                    response.toUiItems(type)
                 }
                 if (version != state(type).requestVersion) return@launch
                 updateState(type) {
+                    val nextResult = it.result.append(response.page, uiItems)
                     it.copy(
-                        result = it.result.append(response),
+                        result = nextResult,
                         loadState = SearchLoadState.Idle,
                         initialized = true,
-                        hasMore = response.itemCount > 0
+                        hasMore = response.itemCount > 0 && nextResult.count > it.result.count
                     )
                 }
             } catch (error: CancellationException) {
@@ -178,23 +138,95 @@ class SearchResultViewModel(
 
     data class SearchResult(
         val type: SearchType,
-        val videos: List<SearchTypeResult.Video> = emptyList(),
-        val mediaBangumis: List<SearchTypeResult.Pgc> = emptyList(),
-        val mediaFts: List<SearchTypeResult.Pgc> = emptyList(),
-        val biliUsers: List<SearchTypeResult.User> = emptyList(),
+        val items: List<SearchResultUiItem> = emptyList(),
         val page: SearchTypePage = SearchTypePage()
     ) {
-        val count get() = videos.size + mediaBangumis.size + mediaFts.size + biliUsers.size
+        val count get() = items.size
 
-        fun append(result: SearchTypeResult): SearchResult = when (type) {
-            SearchType.Video -> copy(videos = videos + result.videos, page = result.page)
-            SearchType.MediaBangumi -> copy(
-                mediaBangumis = mediaBangumis + result.pgcs,
-                page = result.page
+        fun append(nextPage: SearchTypePage, newItems: List<SearchResultUiItem>): SearchResult {
+            val keys = items.asSequence().mapTo(hashSetOf()) { it.key }
+            val uniqueItems = newItems.filter { keys.add(it.key) }
+            return copy(
+                items = items + uniqueItems,
+                page = nextPage,
             )
-            SearchType.MediaFt -> copy(mediaFts = mediaFts + result.pgcs, page = result.page)
-            SearchType.BiliUser -> copy(biliUsers = biliUsers + result.users, page = result.page)
         }
+    }
+}
+
+@Immutable
+sealed interface SearchResultUiItem {
+    val key: String
+    val contentType: String
+
+    @Immutable
+    data class Video(
+        val card: VideoCardData,
+        val aid: Long,
+        val mid: Long,
+        val author: String,
+    ) : SearchResultUiItem {
+        override val key = "video:$aid"
+        override val contentType = "video"
+    }
+
+    @Immutable
+    data class Pgc(
+        val card: SeasonCardData,
+    ) : SearchResultUiItem {
+        override val key = "pgc:${card.seasonId}"
+        override val contentType = "pgc"
+    }
+
+    @Immutable
+    data class User(
+        val mid: Long,
+        val name: String,
+        val avatar: String,
+        val sign: String,
+    ) : SearchResultUiItem {
+        override val key = "user:$mid"
+        override val contentType = "user"
+    }
+}
+
+private fun SearchTypeResult.toUiItems(type: SearchType): List<SearchResultUiItem> = when (type) {
+    SearchType.Video -> videos.map { video ->
+        SearchResultUiItem.Video(
+            card = VideoCardData(
+                avid = video.aid,
+                title = video.title.removeHtmlTags(),
+                cover = video.cover,
+                playString = video.play.takeIf { it != -1 }.toWanString(),
+                danmakuString = video.danmaku.takeIf { it != -1 }.toWanString(),
+                timeString = (video.duration * 1000L).formatHourMinSec(),
+                upName = video.author,
+                pubTime = video.pubTime,
+            ),
+            aid = video.aid,
+            mid = video.mid,
+            author = video.author,
+        )
+    }
+
+    SearchType.MediaBangumi, SearchType.MediaFt -> pgcs.map { pgc ->
+        SearchResultUiItem.Pgc(
+            card = SeasonCardData(
+                seasonId = pgc.seasonId,
+                title = pgc.title.removeHtmlTags(),
+                cover = pgc.cover,
+                rating = String.format(java.util.Locale.ROOT, "%.1f", pgc.star),
+            )
+        )
+    }
+
+    SearchType.BiliUser -> users.map { user ->
+        SearchResultUiItem.User(
+            mid = user.mid,
+            name = user.name,
+            avatar = user.avatar,
+            sign = user.sign,
+        )
     }
 }
 

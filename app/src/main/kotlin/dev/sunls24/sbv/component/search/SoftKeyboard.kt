@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -22,6 +22,16 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.ui.theme.SBVTheme
+import dev.sunls24.sbv.ui.theme.SBVSize
+
+private val LetterAndNumberKeys = listOf(
+    listOf("A", "B", "C", "D", "E", "F"),
+    listOf("G", "H", "I", "J", "K", "L"),
+    listOf("M", "N", "O", "P", "Q", "R"),
+    listOf("S", "T", "U", "V", "W", "X"),
+    listOf("Y", "Z", "1", "2", "3", "4"),
+    listOf("5", "6", "7", "8", "9", "0"),
+)
 
 @Composable
 fun SoftKeyboard(
@@ -32,38 +42,14 @@ fun SoftKeyboard(
     onDelete: () -> Unit,
     onSearch: () -> Unit
 ) {
-    val keys = listOf(
-        listOf("A", "B", "C", "D", "E", "F"),
-        listOf("G", "H", "I", "J", "K", "L"),
-        listOf("M", "N", "O", "P", "Q", "R"),
-        listOf("S", "T", "U", "V", "W", "X"),
-        listOf("Y", "Z", "1", "2", "3", "4"),
-        listOf("5", "6", "7", "8", "9", "0")
-    )
-
     Column(
-        modifier = modifier.width(258.dp),
+        modifier = modifier
+            .widthIn(max = SBVSize.searchPanelWidth)
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        keys.forEachIndexed { rowIndex, rowKeys ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                rowKeys.forEachIndexed { index, key ->
-                    val keyModifier = if (rowIndex == 0 && index == 0) {
-                        Modifier.focusRequester(firstButtonFocusRequester)
-                    } else {
-                        Modifier
-                    }
-                    SoftKeyboardKey(
-                        modifier = keyModifier,
-                        key = key,
-                        onClick = { onClick(key) }
-                    )
-                }
-            }
-        }
         Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             SoftKeyboardButton(
@@ -82,6 +68,26 @@ fun SoftKeyboard(
                 onClick = onSearch
             )
         }
+
+        LetterAndNumberKeys.forEachIndexed { rowIndex, rowKeys ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                rowKeys.forEachIndexed { index, key ->
+                    val keyModifier = if (rowIndex == 0 && index == 0) {
+                        Modifier.focusRequester(firstButtonFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                    SoftKeyboardKey(
+                        modifier = keyModifier.weight(1f),
+                        key = key,
+                        onClick = { onClick(key) }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -92,11 +98,11 @@ fun SoftKeyboardKey(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.height(48.dp),
         onClick = onClick
     ) {
         Box(
-            modifier = Modifier.size(38.dp),
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -114,7 +120,7 @@ fun SoftKeyboardButton(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = modifier.height(38.dp),
+        modifier = modifier.height(48.dp),
         onClick = onClick
     ) {
         Box(
@@ -123,7 +129,7 @@ fun SoftKeyboardButton(
         ) {
             Text(
                 text = key,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.labelLarge
             )
         }
     }

@@ -88,7 +88,7 @@ class SBVApp : Application(), KoinComponent {
         settingsDataStore = applicationContext.dataStore
 
         startKoin<SBVApp> {
-            androidLogger(if (BuildConfig.DEBUG) Level.ERROR else Level.NONE)
+            androidLogger(Level.NONE)
             androidContext(this@SBVApp)
         }
     }

@@ -20,6 +20,7 @@ data class DynamicVideoData(
 /**
  * 动态视频
  *
+ * @property dynamicId 动态唯一 ID
  * @property aid 视频av号
  * @property bvid 视频bv号，grpc pgc 没有bv号
  * @property cid 视频cid，仅 grpc 接口
@@ -34,6 +35,7 @@ data class DynamicVideoData(
  * @property pubTime 视频发布时间
  */
 data class DynamicVideo(
+    val dynamicId: String,
     val aid: Long,
     val bvid: String? = null,
     val cid: Long,
@@ -53,6 +55,7 @@ data class DynamicVideo(
             val archive = item.modules.moduleDynamic.major!!.archive!!
             val author = item.modules.moduleAuthor
             return DynamicVideo(
+                dynamicId = item.idStr,
                 aid = archive.aid.toLong(),
                 bvid = archive.bvid,
                 cid = 0,

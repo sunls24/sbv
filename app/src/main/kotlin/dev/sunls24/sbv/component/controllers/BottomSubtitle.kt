@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.player.subtitle.SubtitleItem
-import dev.sunls24.sbv.BuildConfig
 
 @Composable
 fun BottomSubtitle(
@@ -36,8 +35,7 @@ fun BottomSubtitle(
 
     val updateCurrentText: () -> Unit = {
         runCatching {
-            currentText = subtitleData.find { it.isShowing(currentTime) }?.content
-                ?: if (BuildConfig.DEBUG) "【DEBUG】无内容" else ""
+            currentText = subtitleData.find { it.isShowing(currentTime) }?.content.orEmpty()
         }
     }
 

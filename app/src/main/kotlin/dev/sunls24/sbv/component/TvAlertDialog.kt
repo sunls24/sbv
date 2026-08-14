@@ -31,12 +31,12 @@ fun TvAlertDialog(
     titleContentColor: Color = MaterialTheme.colorScheme.onSurface,
     textContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
-    properties: DialogProperties = DialogProperties()
+    properties: DialogProperties = TvDialogDefaults.properties
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
-        modifier = modifier,
+        modifier = modifier.tvDialogWidth(),
         dismissButton = dismissButton,
         icon = icon,
         title = (@Composable {
@@ -52,7 +52,7 @@ fun TvAlertDialog(
             ) {
                 text?.invoke()
             }
-        }).takeIf { title != null },
+        }).takeIf { text != null },
         shape = shape,
         containerColor = containerColor,
         iconContentColor = iconContentColor,

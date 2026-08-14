@@ -29,11 +29,6 @@
             android:label="@string/title_activity_video_player_v3"
             android:theme="@style/Theme.SBV" />
         <activity
-            android:name=".activities.search.SearchResultActivity"
-            android:exported="false"
-            android:label="@string/title_activity_search_result"
-            android:theme="@style/Theme.SBV" />
-        <activity
             android:name=".activities.user.FollowActivity"
             android:exported="false"
             android:label="@string/title_activity_follow"

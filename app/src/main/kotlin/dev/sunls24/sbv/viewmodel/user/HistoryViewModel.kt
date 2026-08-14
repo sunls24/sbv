@@ -10,7 +10,6 @@ import androidx.lifecycle.viewModelScope
 import dev.sunls24.biliapi.entity.user.HistoryItem
 import dev.sunls24.biliapi.http.entity.AuthFailureException
 import dev.sunls24.biliapi.repositories.HistoryRepository
-import dev.sunls24.sbv.BuildConfig
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.SBVApp
 import dev.sunls24.sbv.entity.carddata.VideoCardData
@@ -64,7 +63,7 @@ class HistoryViewModel(
                 if (error is AuthFailureException) {
                     SBVApp.context.getString(R.string.exception_auth_failure)
                         .toast(SBVApp.context)
-                    if (!BuildConfig.DEBUG) userRepository.logout()
+                    userRepository.logout()
                 }
             } finally {
                 if (version == requestVersion) updateJob = null

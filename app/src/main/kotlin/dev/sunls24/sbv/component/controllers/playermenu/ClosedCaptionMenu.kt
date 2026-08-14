@@ -98,7 +98,7 @@ fun ClosedCaptionMenuList(
                 VideoPlayerClosedCaptionMenuItem.Opacity -> PresetMenuItem(
                     modifier = menuItemsModifier,
                     value = currentOpacity,
-                    values = PERCENTAGE_PRESETS,
+                    values = SUBTITLE_OPACITY_PRESETS,
                     text = NumberFormat.getPercentInstance()
                         .apply { maximumFractionDigits = 0 }
                         .format(currentOpacity),
@@ -155,4 +155,4 @@ fun ClosedCaptionMenuList(
 
 private val SUBTITLE_FONT_SIZE_PRESETS = (12..48 step 4).toList()
 private val SUBTITLE_PADDING_PRESETS = (0..48 step 4).toList()
-private val PERCENTAGE_PRESETS = (0..100 step 10).map { it / 100f }
+private val SUBTITLE_OPACITY_PRESETS = (10..100 step 10).map { it / 100f }

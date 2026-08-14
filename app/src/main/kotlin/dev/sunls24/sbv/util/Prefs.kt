@@ -134,7 +134,7 @@ object Prefs {
                 .mapNotNull { code -> code.toIntOrNull()?.let(DanmakuType::fromCode) }
         }
     )
-    var defaultDanmakuScale by pref(PrefKeys.prefDefaultDanmakuScaleKey, 1.75f)
+    var defaultDanmakuScale by pref(PrefKeys.prefDefaultDanmakuScaleKey, 1.6f)
     var defaultDanmakuOpacity by pref(PrefKeys.prefDefaultDanmakuOpacityKey, 0.7f)
     var defaultDanmakuSpeedFactor by pref(PrefKeys.prefDefaultDanmakuSpeedFactorKey, 1f)
     var defaultDanmakuArea by pref(PrefKeys.prefDefaultDanmakuAreaKey, 0.5f)

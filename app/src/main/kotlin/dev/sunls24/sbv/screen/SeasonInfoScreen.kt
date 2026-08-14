@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -31,7 +30,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -47,16 +45,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -65,8 +60,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -90,11 +83,14 @@ import dev.sunls24.sbv.R
 import dev.sunls24.sbv.activities.video.VideoInfoActivity
 import dev.sunls24.sbv.activities.video.VideoPlayerV3Activity
 import dev.sunls24.sbv.component.TvLazyVerticalGrid
+import dev.sunls24.sbv.tv.component.TvAlertDialog
 import dev.sunls24.sbv.component.buttons.SeasonInfoButtons
 import dev.sunls24.sbv.component.ifElse
 import dev.sunls24.sbv.entity.VideoListItem
 import dev.sunls24.sbv.repository.VideoInfoRepository
 import dev.sunls24.sbv.ui.theme.SBVTheme
+import dev.sunls24.sbv.ui.theme.SBVSpacing
+import dev.sunls24.sbv.ui.theme.focusedTextColor
 import dev.sunls24.sbv.util.ImageSize
 import dev.sunls24.sbv.util.Prefs
 import dev.sunls24.sbv.util.focusedScale
@@ -386,7 +382,7 @@ fun SeasonCover(
                     .height(260.dp)
                     .aspectRatio(0.75f)
                     .background(if (isPreview) Color.White else Color.Transparent),
-                model = cover,
+                model = cover.resizedImageUrl(ImageSize.SeasonCoverThumbnail),
                 contentDescription = null,
                 contentScale = ContentScale.FillHeight
             )
@@ -436,7 +432,7 @@ fun SeasonBaseInfo(
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(text = newEpDesc)
             Text(text = description)
@@ -474,7 +470,7 @@ fun SeasonInfoPart(
     Row(
         modifier = modifier
             .padding(horizontal = 50.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SeasonCover(
@@ -603,12 +599,11 @@ fun SeasonEpisodesDialog(
     }
 
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier,
             title = { Text(text = title) },
             onDismissRequest = { onHideDialog() },
             confirmButton = {},
-            properties = DialogProperties(usePlatformDefaultWidth = false),
             text = {
                 Column(
                     modifier = Modifier
@@ -640,7 +635,7 @@ fun SeasonEpisodesDialog(
                                 ) {
                                     Text(
                                         text = "P${i * 20 + 1}-${(i + 1) * 20}",
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.labelLarge,
                                         color = LocalContentColor.current,
                                         modifier = Modifier.padding(
                                             horizontal = 16.dp,
@@ -710,12 +705,7 @@ fun SeasonEpisodeRow(
 ) {
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
-    val titleFontSize by animateFloatAsState(
-        targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
-    )
-
+    val titleColor = focusedTextColor(hasFocus)
     var showEpisodesDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -726,7 +716,7 @@ fun SeasonEpisodeRow(
         Text(
             modifier = Modifier.padding(start = 50.dp),
             text = title,
-            fontSize = titleFontSize.sp,
+            style = MaterialTheme.typography.titleLarge,
             color = titleColor
         )
 
@@ -735,7 +725,7 @@ fun SeasonEpisodeRow(
                 .padding(top = 15.dp)
                 .focusRestorer(focusRequester),
             contentPadding = PaddingValues(horizontal = 50.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl),
         ) {
             item {
                 Surface(
@@ -762,7 +752,10 @@ fun SeasonEpisodeRow(
                     }
                 }
             }
-            itemsIndexed(items = episodes) { index, episode ->
+            itemsIndexed(
+                items = episodes,
+                key = { _, episode -> episode.id },
+            ) { index, episode ->
                 val episodeTitle = episode.longTitle.ifEmpty { episode.title }
                 SeasonEpisodeButton(
                     modifier = Modifier
@@ -880,37 +873,51 @@ private fun SeasonSelectorContent(
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
-                AsyncImage(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .fillMaxHeight(0.7f)
-                        .graphicsLayer { alpha = 0.99f }
-                        .drawWithContent {
-                            val colors = listOf(
-                                Color.Black,
-                                Color.Transparent
+                        .fillMaxWidth(0.72f)
+                        .fillMaxHeight(0.7f),
+                ) {
+                    AsyncImage(
+                        modifier = Modifier.fillMaxSize(),
+                        model = seasons[focusedSeasonIndex].horizontalCover
+                            ?.resizedImageUrl(ImageSize.Background)
+                            .orEmpty(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.background,
+                                        Color.Transparent,
+                                    )
+                                )
                             )
-                            drawContent()
-                            drawRect(
-                                brush = Brush.horizontalGradient(colors),
-                                blendMode = BlendMode.DstOut
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        MaterialTheme.colorScheme.background,
+                                    )
+                                )
                             )
-                            drawRect(
-                                brush = Brush.verticalGradient(colors),
-                                blendMode = BlendMode.DstIn
-                            )
-                        },
-                    model = seasons[focusedSeasonIndex].horizontalCover ?: "",
-                    contentDescription = null,
-                    contentScale = ContentScale.FillHeight,
-                    alpha = 1f
-                )
+                    )
+                }
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(
-                            start = 48.dp,
-                            end = 48.dp,
+                            start = SBVSpacing.xxxl,
+                            end = SBVSpacing.xxxl,
                             bottom = 300.dp
                         )
                 ) {
@@ -929,9 +936,12 @@ private fun SeasonSelectorContent(
                     modifier = Modifier.padding(bottom = 48.dp),
                     state = rowState,
                     contentPadding = PaddingValues(horizontal = 48.dp),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                    horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl)
                 ) {
-                    itemsIndexed(items = seasons) { index, season ->
+                    itemsIndexed(
+                        items = seasons,
+                        key = { _, season -> season.seasonId },
+                    ) { index, season ->
                         Card(
                             modifier = Modifier
                                 .onFocusChanged {
@@ -962,7 +972,7 @@ private fun SeasonSelectorContent(
                                 modifier = Modifier
                                     .width(160.dp)
                                     .aspectRatio(0.75f),
-                                model = seasons[index].cover,
+                                model = seasons[index].cover.resizedImageUrl(ImageSize.SeasonCoverThumbnail),
                                 contentDescription = null
                             )
                         }

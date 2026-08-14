@@ -33,7 +33,10 @@ class SeasonDetailViewModel(
         progressJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val season = videoDetailRepository.getPgcVideoDetail(seasonId, epId)
+                val season = videoDetailRepository.getPgcVideoDetail(
+                    seasonId = seasonId,
+                    epid = epId,
+                )
                 if (this@SeasonDetailViewModel.seasonId != seasonId ||
                     this@SeasonDetailViewModel.epId != epId
                 ) return@launch
@@ -59,7 +62,10 @@ class SeasonDetailViewModel(
         progressJob?.cancel()
         progressJob = viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                videoDetailRepository.getPgcVideoDetail(seasonId, epId).userStatus.progress
+                videoDetailRepository.getPgcVideoDetail(
+                    seasonId = seasonId,
+                    epid = epId,
+                ).userStatus.progress
             }.onSuccess { progress ->
                 if (this@SeasonDetailViewModel.seasonId != seasonId ||
                     this@SeasonDetailViewModel.epId != epId

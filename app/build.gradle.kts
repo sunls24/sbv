@@ -11,9 +11,6 @@ plugins {
 }
 
 val signingProp = file(project.rootProject.file("signing.properties"))
-val gitRevision = providers.exec {
-    commandLine("git", "rev-list", "HEAD", "--abbrev-commit", "--max-count=1")
-}.standardOutput.asText.map { it.trim() }.get()
 val appVersionCode = AppConfiguration.versionCode
 val appVersionName = AppConfiguration.versionName
 
@@ -93,7 +90,7 @@ android {
             variant.outputs.forEach { output ->
                 val abi = output.filters.firstOrNull()?.identifier ?: "universal"
                 output.outputFileName.set(
-                    "SBV_${appVersionName}_${gitRevision}_${buildType}_$abi.apk"
+                    "SBV_${appVersionName}_${buildType}_$abi.apk"
                 )
             }
         }

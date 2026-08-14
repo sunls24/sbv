@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.component.HomeTopNavItem
@@ -26,6 +25,8 @@ import dev.sunls24.sbv.component.PersonalTopNavItem
 import dev.sunls24.sbv.component.settings.SettingListItem
 import dev.sunls24.sbv.component.settings.SettingSwitchListItem
 import dev.sunls24.sbv.screen.settings.SettingsMenuNavItem
+import dev.sunls24.sbv.ui.theme.SBVPageTitle
+import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.util.Prefs
 
 @Composable
@@ -38,15 +39,15 @@ fun UISetting(modifier: Modifier = Modifier) {
 
     Box(modifier = modifier) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = SBVSpacing.xxxl),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(SBVSpacing.md)
         ) {
             Text(
                 text = SettingsMenuNavItem.UI.getDisplayName(context),
-                style = MaterialTheme.typography.displaySmall
+                style = SBVPageTitle
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(SBVSpacing.md))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     SettingListItem(
@@ -89,7 +90,7 @@ fun UISetting(modifier: Modifier = Modifier) {
             getDisplayName = { it.getDisplayName(context) }
         )
         UiSettingDialog.PersonalPage -> OptionDialog(
-            options = PersonalTopNavItem.entries.toTypedArray(),
+            options = PersonalTopNavItem.displayOrder.toTypedArray(),
             selectedOption = selectedFirstPersonalTopNavItem,
             onDismiss = { activeDialog = null },
             onSelect = {

@@ -19,7 +19,6 @@ internal object SBVColorTokens {
     val secondaryContainer = Color(0xFF554049)
     val onSecondaryContainer = Color(0xFFF5DCE4)
 
-    val background = Color(0xFF0B0D10)
     val onBackground = Color(0xFFE9EEF2)
     val surface = Color(0xFF13171B)
     val onSurface = Color(0xFFE9EEF2)
@@ -28,6 +27,7 @@ internal object SBVColorTokens {
 
     val focus = Color(0xFFF4F7F9)
     val borderVariant = Color(0xFF6A5A60)
+    val warning = Color(0xFFFFC107)
 
     val error = Color(0xFFFFB4AB)
     val onError = Color(0xFF690005)

@@ -8,16 +8,21 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import dev.sunls24.sbv.activities.video.UpInfoActivity
 import dev.sunls24.sbv.activities.video.VideoInfoActivity
 import dev.sunls24.sbv.activities.video.VideoPlayerV3Activity
 import dev.sunls24.sbv.component.LazyGridLoadMoreEffect
 import dev.sunls24.sbv.component.TvLazyVerticalGrid
 import dev.sunls24.sbv.component.videocard.SmallVideoCard
+import dev.sunls24.sbv.ui.theme.SBVSpacing
+import dev.sunls24.sbv.util.firstRowActionFocus
 import dev.sunls24.sbv.viewmodel.user.HistoryViewModel
 import dev.sunls24.sbv.viewmodel.user.ToViewViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -25,11 +30,18 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun HistoryScreen(
     modifier: Modifier = Modifier,
+    fallbackFocusRequester: FocusRequester,
     historyViewModel: HistoryViewModel = koinViewModel(),
     toViewViewModel: ToViewViewModel = koinViewModel()
 ) {
     val gridState = rememberLazyGridState()
     val context = LocalContext.current
+    val firstContentFocusRequester = remember { FocusRequester() }
+    val focusRestorerFallback = if (historyViewModel.histories.isNotEmpty()) {
+        firstContentFocusRequester
+    } else {
+        fallbackFocusRequester
+    }
 
     LazyGridLoadMoreEffect(
         gridState = gridState,
@@ -38,25 +50,39 @@ fun HistoryScreen(
     )
 
     TvLazyVerticalGrid(
-        modifier = modifier,
+        modifier = modifier.focusRestorer(
+            fallback = focusRestorerFallback,
+        ),
         state = gridState,
         columns = GridCells.Fixed(4),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp)
+        contentPadding = PaddingValues(SBVSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(SBVSpacing.xl),
+        horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl)
     ) {
         if (historyViewModel.histories.isNotEmpty()) {
-            itemsIndexed(historyViewModel.histories) { _, history ->
+            itemsIndexed(
+                items = historyViewModel.histories,
+                key = { _, history -> history.avid },
+            ) { index, history ->
                 Box(
                     contentAlignment = Alignment.Center
                 ) {
                     SmallVideoCard(
+                        modifier = if (history.avid == historyViewModel.histories.firstOrNull()?.avid) {
+                            Modifier.focusRequester(firstContentFocusRequester)
+                        } else {
+                            Modifier
+                        },
+                        actionModifier = Modifier.firstRowActionFocus(
+                            index = index,
+                            columns = 4,
+                            focusRequester = fallbackFocusRequester,
+                        ),
                         data = history,
                         onClick = {
                             VideoPlayerV3Activity.play(
                                 context = context,
                                 aid = history.avid,
-                                epid = history.epId
                             )
                         },
                         onAddWatchLater = {
@@ -66,7 +92,6 @@ fun HistoryScreen(
                             VideoInfoActivity.showDetail(
                                 context = context,
                                 aid = history.avid,
-                                epid = history.epId
                             )
                         },
                         onGoToUpPage = history.upMid?.let {

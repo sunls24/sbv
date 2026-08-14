@@ -17,8 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.component.settings.SettingListItem
@@ -30,6 +28,8 @@ import dev.sunls24.sbv.entity.Resolution
 import dev.sunls24.sbv.entity.VideoCodec
 import dev.sunls24.sbv.screen.settings.SettingsMenuNavItem
 import dev.sunls24.sbv.util.Prefs
+import dev.sunls24.sbv.ui.theme.SBVPageTitle
+import dev.sunls24.sbv.ui.theme.SBVSpacing
 
 @Composable
 fun AudioVideoSetting(
@@ -52,15 +52,15 @@ fun AudioVideoSetting(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = 48.dp),
+            .padding(horizontal = SBVSpacing.xxxl),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(SBVSpacing.md)
     ) {
         Text(
             text = SettingsMenuNavItem.AudioVideo.getDisplayName(context),
-            style = MaterialTheme.typography.displaySmall
+            style = SBVPageTitle
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(SBVSpacing.md))
         SettingListItem(
             title = "默认分辨率",
             supportText = "当前：${selectedResolution.getDisplayName(context)}",

@@ -24,7 +24,7 @@ fun LoadingTip(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         CircularProgressIndicator(
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.size(28.dp)
         )
         Text(
             text = stringResource(id = R.string.loading),

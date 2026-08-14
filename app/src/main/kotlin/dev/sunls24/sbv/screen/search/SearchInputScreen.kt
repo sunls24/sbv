@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
@@ -36,10 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -53,10 +51,13 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.sunls24.biliapi.entity.search.Hotword
 import dev.sunls24.sbv.R
-import dev.sunls24.sbv.activities.search.SearchResultActivity
 import dev.sunls24.sbv.component.search.SearchKeyword
 import dev.sunls24.sbv.component.search.SoftKeyboard
 import dev.sunls24.sbv.tv.component.TvAlertDialog
+import dev.sunls24.sbv.tv.component.tvDialogButtonHeight
+import dev.sunls24.sbv.ui.theme.SBVMaterial3Typography
+import dev.sunls24.sbv.ui.theme.SBVPageTitle
+import dev.sunls24.sbv.ui.theme.SBVSize
 import dev.sunls24.sbv.ui.theme.SBVTheme
 import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.util.Prefs
@@ -67,19 +68,46 @@ import org.koin.androidx.compose.koinViewModel
 fun SearchInputScreen(
     modifier: Modifier = Modifier,
     defaultFocusRequester: FocusRequester,
+    onSearchRequest: (String) -> Unit,
     searchInputViewModel: SearchInputViewModel = koinViewModel()
 ) {
-    val context = LocalContext.current
-
     val searchKeyword = searchInputViewModel.keyword
     val hotwords = searchInputViewModel.hotwords
     val searchHistories = searchInputViewModel.searchHistories
     val suggests = searchInputViewModel.suggests
 
-    val onSearch: (String) -> Unit = { keyword ->
-        SearchResultActivity.actionStart(context, keyword)
-        searchInputViewModel.keyword = keyword
-        searchInputViewModel.addSearchHistory(keyword)
+    val onKeywordChange: (String) -> Unit = remember(searchInputViewModel) {
+        { searchInputViewModel.keyword = it }
+    }
+    val onAppendKeyword: (String) -> Unit = remember(searchInputViewModel) {
+        { searchInputViewModel.keyword += it }
+    }
+    val onClearKeyword: () -> Unit = remember(searchInputViewModel) {
+        { searchInputViewModel.keyword = "" }
+    }
+    val onDeleteKeyword: () -> Unit = remember(searchInputViewModel) {
+        {
+            if (searchInputViewModel.keyword.isNotEmpty()) {
+                searchInputViewModel.keyword = searchInputViewModel.keyword.dropLast(1)
+            }
+        }
+    }
+    val onSearch: (String) -> Unit = remember(searchInputViewModel, onSearchRequest) {
+        { keyword ->
+            val normalized = keyword.trim()
+            if (normalized.isNotEmpty()) {
+                onSearchRequest(normalized)
+                searchInputViewModel.keyword = normalized
+                searchInputViewModel.addSearchHistory(normalized)
+            }
+        }
+    }
+    val onSubmitSearch: () -> Unit = remember(searchInputViewModel, onSearch) {
+        { onSearch(searchInputViewModel.keyword) }
+    }
+
+    LaunchedEffect(Unit) {
+        searchInputViewModel.keyword = ""
     }
 
     LaunchedEffect(searchKeyword) {
@@ -90,7 +118,11 @@ fun SearchInputScreen(
         modifier = modifier,
         defaultFocusRequester = defaultFocusRequester,
         searchKeyword = searchKeyword,
-        onSearchKeywordChange = { searchInputViewModel.keyword = it },
+        onSearchKeywordChange = onKeywordChange,
+        onAppendKeyword = onAppendKeyword,
+        onClearKeyword = onClearKeyword,
+        onDeleteKeyword = onDeleteKeyword,
+        onSubmitSearch = onSubmitSearch,
         onSearch = onSearch,
         hotwords = hotwords,
         suggests = suggests,
@@ -106,6 +138,10 @@ private fun SearchInputScreenContent(
     defaultFocusRequester: FocusRequester,
     searchKeyword: String,
     onSearchKeywordChange: (String) -> Unit,
+    onAppendKeyword: (String) -> Unit,
+    onClearKeyword: () -> Unit,
+    onDeleteKeyword: () -> Unit,
+    onSubmitSearch: () -> Unit,
     onSearch: (String) -> Unit,
     hotwords: List<Hotword>,
     suggests: List<String>,
@@ -113,60 +149,50 @@ private fun SearchInputScreenContent(
     onDeleteHistory: (String) -> Unit,
     onDeleteAllHistories: () -> Unit
 ) {
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            Box(
-                modifier = Modifier.padding(
-                    start = SBVSpacing.xl,
-                    top = SBVSpacing.lg,
-                    bottom = SBVSpacing.sm,
-                    end = SBVSpacing.xl,
-                )
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(R.string.search_input_title),
-                        style = MaterialTheme.typography.displaySmall,
-                    )
-                }
-            }
-        }
-    ) { innerPadding ->
+    Scaffold(modifier = modifier) { innerPadding ->
         Row(
             modifier = Modifier
                 .padding(innerPadding)
-                .padding(vertical = SBVSpacing.sm)
-                .padding(start = SBVSpacing.lg)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(SBVSpacing.xl)
+                .fillMaxWidth()
+                .padding(
+                    top = SBVSpacing.xxl,
+                    bottom = SBVSpacing.sm,
+                    start = SBVSpacing.xl,
+                    end = SBVSpacing.xl,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(
+                space = SBVSpacing.xxl,
+                alignment = Alignment.CenterHorizontally,
+            )
         ) {
             SearchInput(
+                modifier = Modifier.weight(1.15f),
                 firstButtonFocusRequester = defaultFocusRequester,
                 searchKeyword = searchKeyword,
                 onSearchKeywordChange = onSearchKeywordChange,
-                onSearch = { onSearch(searchKeyword) }
+                onAppendKeyword = onAppendKeyword,
+                onClearKeyword = onClearKeyword,
+                onDeleteKeyword = onDeleteKeyword,
+                onSearch = onSubmitSearch,
             )
 
             if (searchKeyword.isEmpty()) {
                 SearchHotwords(
+                    modifier = Modifier.weight(1f),
                     hotwords = hotwords,
                     onSearch = onSearch
                 )
             } else {
                 SearchSuggestion(
+                    modifier = Modifier.weight(1f),
                     suggests = suggests,
                     onSearch = onSearch
                 )
             }
 
             SearchHistory(
-                modifier = Modifier
-                    .padding(end = 10.dp),
+                modifier = Modifier.weight(1f),
+                fallbackFocusRequester = defaultFocusRequester,
                 histories = histories,
                 onSearch = onSearch,
                 onDelete = onDeleteHistory,
@@ -182,27 +208,39 @@ private fun SearchInput(
     firstButtonFocusRequester: FocusRequester,
     searchKeyword: String,
     onSearchKeywordChange: (String) -> Unit,
-    onSearch: (String) -> Unit
+    onAppendKeyword: (String) -> Unit,
+    onClearKeyword: () -> Unit,
+    onDeleteKeyword: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     Box(
         modifier = modifier
-            .width(280.dp)
+            .fillMaxWidth()
             .fillMaxHeight()
             .focusGroup(),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
+            modifier = Modifier
+                .widthIn(max = SBVSize.searchPanelWidth)
+                .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = stringResource(R.string.search_input_title),
+                style = SBVPageTitle,
+            )
             OutlinedTextField(
-                modifier = Modifier.width(258.dp),
+                modifier = Modifier.fillMaxWidth(),
                 value = searchKeyword,
                 onValueChange = onSearchKeywordChange,
+                textStyle = SBVMaterial3Typography.bodyLarge,
                 maxLines = 1,
                 shape = MaterialTheme.shapes.large,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearch(searchKeyword) }),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -212,14 +250,10 @@ private fun SearchInput(
             )
             SoftKeyboard(
                 firstButtonFocusRequester = firstButtonFocusRequester,
-                onClick = { onSearchKeywordChange(searchKeyword + it) },
-                onClear = { onSearchKeywordChange("") },
-                onDelete = {
-                    if (searchKeyword.isNotEmpty()) {
-                        onSearchKeywordChange(searchKeyword.dropLast(1))
-                    }
-                },
-                onSearch = { onSearch(searchKeyword) }
+                onClick = onAppendKeyword,
+                onClear = onClearKeyword,
+                onDelete = onDeleteKeyword,
+                onSearch = onSearch,
             )
         }
     }
@@ -235,7 +269,8 @@ private fun SearchHotwords(
 
     Column(
         modifier = modifier
-            .width(250.dp)
+            .widthIn(max = SBVSize.searchPanelWidth)
+            .fillMaxWidth()
             .fillMaxHeight()
             .focusGroup(),
     ) {
@@ -284,7 +319,10 @@ private fun SearchHotwords(
                 modifier = Modifier,
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
-                itemsIndexed(hotwords) { index, hotword ->
+                items(
+                    items = hotwords,
+                    key = { it.showName },
+                ) { hotword ->
                     SearchKeyword(
                         modifier = Modifier,
                         keyword = hotword.showName,
@@ -306,7 +344,8 @@ private fun SearchSuggestion(
 ) {
     Column(
         modifier = modifier
-            .width(250.dp)
+            .widthIn(max = SBVSize.searchPanelWidth)
+            .fillMaxWidth()
             .fillMaxHeight()
             .focusGroup(),
     ) {
@@ -319,7 +358,10 @@ private fun SearchSuggestion(
             modifier = Modifier,
             contentPadding = PaddingValues(vertical = 4.dp)
         ) {
-            itemsIndexed(suggests) { index, suggest ->
+            items(
+                items = suggests,
+                key = { it },
+            ) { suggest ->
                 SearchKeyword(
                     modifier = Modifier,
                     keyword = suggest,
@@ -334,21 +376,31 @@ private fun SearchSuggestion(
 @Composable
 private fun SearchHistory(
     modifier: Modifier = Modifier,
+    fallbackFocusRequester: FocusRequester,
     histories: List<String>,
     onSearch: (String) -> Unit,
     onDelete: (String) -> Unit,
     onDeleteAll: () -> Unit
 ) {
-    val focusManager = LocalFocusManager.current
-
+    val firstHistoryFocusRequester = remember { FocusRequester() }
+    val historyCount = histories.size
+    val focusRestorerFallback = if (historyCount > 0) {
+        firstHistoryFocusRequester
+    } else {
+        fallbackFocusRequester
+    }
     var deleteMode by remember { mutableStateOf(false) }
     var showDeleteAllConfirmDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
-            .width(250.dp)
+            .widthIn(max = SBVSize.searchPanelWidth)
+            .fillMaxWidth()
             .fillMaxHeight()
-            .focusGroup(),
+            .focusGroup()
+            .focusRestorer(
+                fallback = focusRestorerFallback,
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -360,7 +412,9 @@ private fun SearchHistory(
                 text = stringResource(R.string.search_input_history),
                 style = MaterialTheme.typography.titleMedium
             )
-            Row {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(SBVSpacing.sm)
+            ) {
                 if (deleteMode) {
                     IconButton(
                         onClick = { showDeleteAllConfirmDialog = true },
@@ -390,16 +444,20 @@ private fun SearchHistory(
             modifier = Modifier,
             contentPadding = PaddingValues(vertical = 4.dp)
         ) {
-            itemsIndexed(histories) { index, searchHistory ->
+            items(
+                items = histories,
+                key = { it },
+            ) { searchHistory ->
                 SearchKeyword(
-                    modifier = Modifier,
+                    modifier = if (searchHistory == histories.firstOrNull()) {
+                        Modifier.focusRequester(firstHistoryFocusRequester)
+                    } else {
+                        Modifier
+                    },
                     keyword = searchHistory,
                     leadingIcon = "",
                     onClick = {
                         if (deleteMode) {
-                            if (index == histories.lastIndex) {
-                                focusManager.moveFocus(FocusDirection.Up)
-                            }
                             onDelete(searchHistory)
                         } else {
                             onSearch(searchHistory)
@@ -421,24 +479,36 @@ private fun SearchHistory(
         TvAlertDialog(
             onDismissRequest = { showDeleteAllConfirmDialog = false },
             title = {
-                Text(text = stringResource(R.string.search_input_history_delete_all_confirm_dialog_title))
+                Text(
+                    text = stringResource(R.string.search_input_history_delete_all_confirm_dialog_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
             },
             text = {
-                Text(text = stringResource(R.string.search_input_history_delete_all_confirm_dialog_text))
+                Text(
+                    text = stringResource(R.string.search_input_history_delete_all_confirm_dialog_text),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             },
             confirmButton = {
-                Button(onClick = {
-                    onDeleteAll()
-                    showDeleteAllConfirmDialog = false
-                    deleteMode = false
-                }) {
+                Button(
+                    modifier = Modifier.tvDialogButtonHeight(),
+                    onClick = {
+                        onDeleteAll()
+                        showDeleteAllConfirmDialog = false
+                        deleteMode = false
+                    }
+                ) {
                     Text(text = stringResource(R.string.search_input_history_delete_all_confirm_dialog_confirm_button))
                 }
             },
             dismissButton = {
-                Button(onClick = {
-                    showDeleteAllConfirmDialog = false
-                }) {
+                Button(
+                    modifier = Modifier.tvDialogButtonHeight(),
+                    onClick = {
+                        showDeleteAllConfirmDialog = false
+                    }
+                ) {
                     Text(text = stringResource(R.string.search_input_history_delete_all_confirm_dialog_cancel_button))
                 }
             }
@@ -463,6 +533,10 @@ private fun SearchInputScreenContentPreview() {
                 defaultFocusRequester = FocusRequester.Default,
                 searchKeyword = "",
                 onSearchKeywordChange = {},
+                onAppendKeyword = {},
+                onClearKeyword = {},
+                onDeleteKeyword = {},
+                onSubmitSearch = {},
                 onSearch = {},
                 hotwords = listOf(
                     Hotword("热搜1", "热搜1", null),

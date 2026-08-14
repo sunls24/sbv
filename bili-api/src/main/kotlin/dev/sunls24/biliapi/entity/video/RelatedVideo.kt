@@ -9,8 +9,6 @@ data class RelatedVideo(
     val title: String,
     val duration: Int,
     val author: Author?,
-    val jumpToSeason: Boolean,
-    val epid: Int?,
     val view: Int,
     val danmaku: Int
 ) {
@@ -23,8 +21,6 @@ data class RelatedVideo(
                 title = relate.title,
                 duration = relate.duration,
                 author = relate.owner.let { Author.fromVideoOwner(it) },
-                jumpToSeason = false,
-                epid = null,
                 view = relate.stat.view,
                 danmaku = relate.stat.danmaku
             )

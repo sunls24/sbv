@@ -14,17 +14,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CornerSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -36,15 +37,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -53,15 +49,22 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.ui.state.SeekerState
+import dev.sunls24.sbv.ui.theme.SBVFocus
 import dev.sunls24.sbv.ui.theme.SBVTheme
 import dev.sunls24.sbv.util.formatHourMinSec
-import kotlinx.coroutines.delay
+
+enum class InfoSeekFocus {
+    Seek,
+    Actions,
+}
 
 @Composable
 fun ControllerVideoInfo(
     modifier: Modifier = Modifier,
     show: Boolean,
     isSeeking: Boolean,
+    isPlaying: Boolean,
+    initialFocus: InfoSeekFocus = InfoSeekFocus.Seek,
     goTime: Long,
     seekerState: SeekerState,
     title: String,
@@ -108,6 +111,8 @@ fun ControllerVideoInfo(
                     .align(Alignment.BottomCenter),
                 show = show,
                 isSeeking = isSeeking,
+                isPlaying = isPlaying,
+                initialFocus = initialFocus,
                 goTime = goTime,
                 seekerState = seekerState,
                 fromSeason = fromSeason,
@@ -186,6 +191,8 @@ fun ControllerVideoInfoBottom(
     modifier: Modifier = Modifier,
     show: Boolean,
     isSeeking: Boolean,
+    isPlaying: Boolean,
+    initialFocus: InfoSeekFocus = InfoSeekFocus.Seek,
     goTime: Long,
     seekerState: SeekerState,
     fromSeason: Boolean,
@@ -207,12 +214,20 @@ fun ControllerVideoInfoBottom(
 
     var isSeekFocused by remember { mutableStateOf(false) }
 
-    LaunchedEffect(show) {
+    LaunchedEffect(show, initialFocus) {
         if (show) {
-            delay(50)
-            try {
-                seekFocusRequester.requestFocus()
-            } catch (e: IllegalStateException) {
+            val focusRequester = when (initialFocus) {
+                InfoSeekFocus.Seek -> seekFocusRequester
+                InfoSeekFocus.Actions -> buttonsFocusRequester
+            }
+            var focused = false
+            repeat(2) {
+                if (!focused) {
+                    withFrameNanos { }
+                    focused = runCatching {
+                        focusRequester.requestFocus()
+                    }.getOrDefault(false)
+                }
             }
         }
     }
@@ -231,7 +246,7 @@ fun ControllerVideoInfoBottom(
                 modifier = Modifier.padding(bottom = 2.dp, start = 24.dp),
                 text = "${if (isSeeking) goTime.formatHourMinSec() else seekerState.currentTime.formatHourMinSec()} / ${seekerState.totalDuration.formatHourMinSec()}",
                 color = Color.White,
-                style = TextStyle(
+                style = MaterialTheme.typography.bodyLarge.copy(
                     shadow = Shadow(color = Color.Black, blurRadius = 1f),
                 ),
             )
@@ -242,10 +257,13 @@ fun ControllerVideoInfoBottom(
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = if (isSeekFocused) 1f else 0f),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = MaterialTheme.shapes.medium
                 )
-                .focusable()
+                .focusProperties {
+                    down = buttonsFocusRequester
+                }
                 .focusRequester(seekFocusRequester)
+                .focusable()
                 .onKeyEvent {
                     when (it.key) {
                         Key.DirectionCenter, Key.Enter, Key.Spacebar -> {
@@ -270,11 +288,6 @@ fun ControllerVideoInfoBottom(
                             return@onKeyEvent true
                         }
 
-                        Key.DirectionDown -> {
-                            if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
-                            buttonsFocusRequester.requestFocus()
-                            return@onKeyEvent true
-                        }
                     }
                     return@onKeyEvent false
                 }
@@ -284,7 +297,6 @@ fun ControllerVideoInfoBottom(
         ) {
             VideoProgressSeek(
                 modifier = Modifier
-                    .focusable()
                     .fillMaxWidth(),
                 duration = seekerState.totalDuration,
                 position = if (isSeeking) goTime else seekerState.currentTime,
@@ -294,42 +306,66 @@ fun ControllerVideoInfoBottom(
         }
 
         val icons = listOfNotNull(
-            (R.drawable.play_pause_24px to "播放/暂停") to onPlayPause,
-            ((if (danmakuEnabled) (R.drawable.danmaku_on_24px) else (R.drawable.danmaku_off_24px)) to "弹幕开关") to onDanmakuSwitchChange,
-            (R.drawable.settings_24px to "打开设置") to onShowSettings,
-            if (!fromSeason) (R.drawable.info_24px to "视频信息") to onGoToVideoInfo else null,
-            if (!fromSeason) (R.drawable.contact_page_24px to "up主页") to onGoToUpPage else null,
-            if (!fromSeason)(R.drawable.related_videos_24px to "相关视频") to onShowRelatedVideos else null,
-            ((if (isLooping) (R.drawable.repeat_one_on_24px) else (R.drawable.repeat_one_24px)) to "循环播放") to onToggleLoop,
+            ((if (isPlaying) R.drawable.ic_symbol_pause_filled else R.drawable.ic_symbol_play_arrow_filled) to
+                stringResource(
+                    if (isPlaying) R.string.video_player_control_pause
+                    else R.string.video_player_control_play
+                )) to onPlayPause,
+            ((if (danmakuEnabled) (R.drawable.danmaku_on_24px) else (R.drawable.danmaku_off_24px)) to
+                stringResource(R.string.video_player_control_danmaku)) to onDanmakuSwitchChange,
+            (R.drawable.settings_24px to stringResource(R.string.video_player_control_settings)) to onShowSettings,
+            if (!fromSeason) {
+                (R.drawable.info_24px to stringResource(R.string.video_card_action_detail)) to onGoToVideoInfo
+            } else null,
+            if (!fromSeason) {
+                (R.drawable.ic_up to stringResource(R.string.video_card_action_up_page)) to onGoToUpPage
+            } else null,
+            if (!fromSeason) {
+                (R.drawable.related_videos_24px to stringResource(R.string.video_player_control_related)) to onShowRelatedVideos
+            } else null,
+            ((if (isLooping) (R.drawable.repeat_one_on_24px) else (R.drawable.repeat_one_24px)) to
+                stringResource(R.string.video_player_control_loop)) to onToggleLoop,
         )
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(buttonsFocusRequester)
-                .onKeyEvent {
-                    if (it.key == Key.DirectionUp) {
-                        if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
-                        seekFocusRequester.requestFocus()
-                        return@onKeyEvent true
-                    }
-                    return@onKeyEvent false
-                }
                 .padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start)
         ) {
-            icons.forEach { (icon, function) ->
+            icons.forEachIndexed { index, (icon, function) ->
                 Surface(
+                    modifier = Modifier
+                        .focusProperties {
+                            up = seekFocusRequester
+                        }
+                        .then(
+                            if (index == 0) {
+                                Modifier.focusRequester(buttonsFocusRequester)
+                            } else {
+                                Modifier
+                            }
+                        ),
                     onClick = function,
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = SBVFocus.focusedScale),
                     shape = ClickableSurfaceDefaults.shape(
                         shape = MaterialTheme.shapes.small,
                     ),
                 ) {
-                    Icon(
-                        painter = painterResource(id = icon.first),
-                        contentDescription = icon.second,
-                        modifier = Modifier.padding(5.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            painter = painterResource(id = icon.first),
+                            contentDescription = null,
+                        )
+                        Text(
+                            text = icon.second,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
                 }
             }
         }
@@ -345,17 +381,10 @@ private fun Clock(
     Text(
         modifier = modifier,
         color = Color.White,
-        fontWeight = FontWeight.Bold,
-        style = TextStyle(
+        style = MaterialTheme.typography.displaySmall.copy(
             shadow = Shadow(color = Color.Black, blurRadius = 1f),
         ),
-        text = buildAnnotatedString {
-            withStyle(SpanStyle(fontSize = 32.sp)) {
-                append("$hour".padStart(2, '0'))
-                append(":")
-                append("$minute".padStart(2, '0'))
-            }
-        }
+        text = "${"$hour".padStart(2, '0')}:${"$minute".padStart(2, '0')}",
     )
 }
 
@@ -391,8 +420,9 @@ private fun ControllerVideoInfoPreview() {
             modifier = Modifier.fillMaxSize(),
             show = show,
             isSeeking = false,
+            isPlaying = false,
             goTime = 0,
-            seekerState = SeekerState(0, 0, 0, ""),
+            seekerState = SeekerState(0, 0, 0),
             title = "【A320】民航史上最佳逆袭！A320的前世今生！民航史上最佳逆袭！A320的前世今生！",
             clock = Pair(12, 30),
             fromSeason = false,

@@ -20,11 +20,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
-import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButtonDefaults
@@ -82,9 +81,9 @@ fun LikeButton(
         colors = ButtonDefaults.colors(pressedContainerColor = animatedColor.value),
         onClick = {}
     ) {
-        Icon(
-            painter = painterResource(if (isLiked) R.drawable.ic_symbol_thumb_up_filled else R.drawable.ic_symbol_thumb_up),
-            contentDescription = null,
+        VideoActionContent(
+            icon = if (isLiked) R.drawable.ic_symbol_thumb_up_filled else R.drawable.ic_symbol_thumb_up,
+            label = stringResource(R.string.video_info_action_like),
         )
     }
 }

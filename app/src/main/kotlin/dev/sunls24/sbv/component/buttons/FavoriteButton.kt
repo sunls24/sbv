@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +33,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import dev.sunls24.biliapi.entity.FavoriteFolderMetadata
 import dev.sunls24.sbv.R
+import dev.sunls24.sbv.tv.component.TvAlertDialog
 import dev.sunls24.sbv.ui.theme.SBVTheme
 import dev.sunls24.sbv.util.swapList
 
@@ -57,9 +57,9 @@ fun FavoriteButton(
             } else onAddToDefaultFavoriteFolder()
         }
     ) {
-        Icon(
-            painter = painterResource(if (isFavorite) R.drawable.ic_symbol_star_filled else R.drawable.ic_symbol_star),
-            contentDescription = null
+        VideoActionContent(
+            icon = if (isFavorite) R.drawable.ic_symbol_star_filled else R.drawable.ic_symbol_star,
+            label = stringResource(R.string.video_info_action_favorite),
         )
     }
 
@@ -93,7 +93,7 @@ private fun FavoriteDialog(
     }
 
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier,
             onDismissRequest = onHideDialog,
             confirmButton = {},
@@ -104,8 +104,8 @@ private fun FavoriteDialog(
                         .heightIn(max = 320.dp)
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     userFavoriteFolders.forEachIndexed { index, userFavoriteFolder ->
                         val selected = selectedFavoriteFolderIds.contains(userFavoriteFolder.id)

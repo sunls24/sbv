@@ -125,8 +125,6 @@ class VideoInfoRepository(private val videoDetailRepository: VideoDetailReposito
                 timeString = (it.duration * 1000L).formatHourMinSec(),
                 playString = it.view.toWanString(),
                 danmakuString = it.danmaku.toWanString(),
-                jumpToSeason = it.jumpToSeason,
-                epId = it.epid,
             )
         }
 

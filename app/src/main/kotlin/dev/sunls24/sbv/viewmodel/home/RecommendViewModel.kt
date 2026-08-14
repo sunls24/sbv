@@ -55,18 +55,14 @@ class RecommendViewModel(
         loading = true
         loadJob = viewModelScope.launch {
             try {
-                var loadCount = 0
-                do {
-                    val page = nextPage
-                    val data = withContext(Dispatchers.IO) {
-                        recommendVideoRepository.getRecommendVideos(page)
-                    }
-                    if (version != requestVersion) return@launch
-                    nextPage = data.nextPage
-                    recommendVideoList.addAll(data.items)
-                    initialized = true
-                    loadCount++
-                } while (recommendVideoList.size < 24 && loadCount < 3)
+                val page = nextPage
+                val data = withContext(Dispatchers.IO) {
+                    recommendVideoRepository.getRecommendVideos(page)
+                }
+                if (version != requestVersion) return@launch
+                nextPage = data.nextPage
+                recommendVideoList.addAll(data.items)
+                initialized = true
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {

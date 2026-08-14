@@ -2,7 +2,6 @@ package dev.sunls24.biliapi.entity.ugc
 
 import dev.sunls24.biliapi.http.entity.home.RcmdTopData
 import dev.sunls24.biliapi.http.util.smartDate
-import dev.sunls24.biliapi.http.util.toSmartDate
 
 data class UgcItem(
     val aid: Long,
@@ -43,19 +42,6 @@ data class UgcItem(
                 play = videoInfo.stat.view,
                 danmaku = videoInfo.stat.danmaku,
                 pubTime = videoInfo.pubdate.smartDate
-            )
-
-        fun fromRegionRcmdArchive(archive: dev.sunls24.biliapi.http.entity.region.RegionFeedRcmd.Archive) =
-            UgcItem(
-                aid = archive.aid,
-                title = archive.title,
-                duration = archive.duration,
-                author = archive.author.name,
-                authorMid = archive.author.mid,
-                cover = archive.cover,
-                play = archive.stat.view,
-                danmaku = archive.stat.danmaku,
-                pubTime = archive.pubdate.toSmartDate()
             )
     }
 }

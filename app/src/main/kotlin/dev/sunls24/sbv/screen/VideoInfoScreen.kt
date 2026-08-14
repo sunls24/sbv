@@ -3,7 +3,6 @@ package dev.sunls24.sbv.screen
 import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,7 +34,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -66,8 +65,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -93,6 +90,7 @@ import dev.sunls24.sbv.activities.video.UpInfoActivity
 import dev.sunls24.sbv.activities.video.VideoInfoActivity
 import dev.sunls24.sbv.activities.video.VideoPlayerV3Activity
 import dev.sunls24.sbv.component.TvLazyVerticalGrid
+import dev.sunls24.sbv.tv.component.TvAlertDialog
 import dev.sunls24.sbv.component.UpIcon
 import dev.sunls24.sbv.component.buttons.CoinButton
 import dev.sunls24.sbv.component.buttons.FavoriteButton
@@ -102,9 +100,14 @@ import dev.sunls24.sbv.component.videocard.VideosRow
 import dev.sunls24.sbv.entity.VideoListItem
 import dev.sunls24.sbv.ui.effect.UiEffect
 import dev.sunls24.sbv.ui.effect.VideoDetailUiEffect
+import dev.sunls24.sbv.ui.theme.SBVColorTokens
+import dev.sunls24.sbv.ui.theme.SBVFocus
 import dev.sunls24.sbv.ui.theme.SBVTheme
+import dev.sunls24.sbv.ui.theme.focusedTextColor
 import dev.sunls24.sbv.util.focusedBorder
 import dev.sunls24.sbv.util.formatPubTimeString
+import dev.sunls24.sbv.util.ImageSize
+import dev.sunls24.sbv.util.resizedImageUrl
 import dev.sunls24.sbv.util.requestFocus
 import dev.sunls24.sbv.util.toWanString
 import dev.sunls24.sbv.util.toast
@@ -376,14 +379,7 @@ fun VideoInfoScreen(
                                     header = stringResource(R.string.video_info_related_video_title),
                                     videos = relatedVideos,
                                     onVideoClicked = { videoData ->
-                                        if (videoData.jumpToSeason) {
-                                            SeasonInfoActivity.actionStart(
-                                                context = context,
-                                                epId = videoData.epId!!
-                                            )
-                                        } else {
-                                            VideoPlayerV3Activity.play(context, videoData.avid)
-                                        }
+                                        VideoPlayerV3Activity.play(context, videoData.avid)
                                     },
                                     onAddWatchLater = { aid ->
                                         toViewViewModel.addToView(aid)
@@ -431,8 +427,8 @@ fun ArgueTip(
             .fillMaxWidth()
             .padding(horizontal = 50.dp),
         colors = SurfaceDefaults.colors(
-            containerColor = Color.Yellow.copy(alpha = 0.2f),
-            contentColor = Color.Yellow
+            containerColor = SBVColorTokens.warning.copy(alpha = 0.2f),
+            contentColor = SBVColorTokens.warning
         ),
         shape = MaterialTheme.shapes.small
     ) {
@@ -447,7 +443,7 @@ fun ArgueTip(
             Icon(
                 painter = painterResource(R.drawable.ic_symbol_warning_filled),
                 contentDescription = null,
-                tint = Color.Yellow
+                tint = SBVColorTokens.warning
             )
             Text(text = text)
         }
@@ -498,14 +494,17 @@ fun VideoInfoData(
             ),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(width = 3.dp, color = MaterialTheme.colorScheme.border),
+                    border = BorderStroke(
+                        width = SBVFocus.borderWidth,
+                        color = MaterialTheme.colorScheme.border
+                    ),
                     shape = MaterialTheme.shapes.large
                 )
             ),
         ) {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),
-                model = videoDetail.cover,
+                model = videoDetail.cover.resizedImageUrl(ImageSize.SmallVideoCardCover),
                 contentDescription = null,
                 contentScale = ContentScale.Crop
             )
@@ -514,8 +513,8 @@ fun VideoInfoData(
         Column(
             modifier = Modifier
                 .weight(7f)
-                .height(heightIs),
-            verticalArrangement = Arrangement.SpaceBetween
+                .heightIn(min = heightIs),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -525,7 +524,7 @@ fun VideoInfoData(
                     style = MaterialTheme.typography.titleLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -548,36 +547,27 @@ fun VideoInfoData(
                         Text(text = "收藏 ${videoDetail.stat.favorite.toWanString()}")
                     }
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    UpButton(
-                        name = videoDetail.author.name,
-                        followed = isFollowing,
-                        isLoggedIn = isLoggedIn,
-                        onClickUp = onClickUp,
-                        onAddFollow = onAddFollow,
-                        onDelFollow = onDelFollow
-                    )
-                }
             }
+            UpButton(
+                name = videoDetail.author.name,
+                followed = isFollowing,
+                isLoggedIn = isLoggedIn,
+                onClickUp = onClickUp,
+                onAddFollow = onAddFollow,
+                onDelFollow = onDelFollow
+            )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 LikeButton(
                     isLiked = isLiked,
                     onClick = { onUpdateLiked(!isLiked) },
                     onLongClick = { onSendVideoOneClickTripleAction() })
-                Spacer(modifier = Modifier.width(5.dp))
                 CoinButton(
                     isCoined = isCoined,
                     onClick = onSendVideoCoin,
                 )
-                Spacer(modifier = Modifier.width(5.dp))
                 FavoriteButton(
                     isFavorite = isFavorite,
                     userFavoriteFolders = userFavoriteFolders,
@@ -603,48 +593,53 @@ private fun UpButton(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier
                 .clip(MaterialTheme.shapes.small)
-                .background(Color.White.copy(alpha = 0.2f))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
                 .focusedBorder(MaterialTheme.shapes.small)
-                .padding(4.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
                 .clickable { onClickUp() },
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            UpIcon(color = Color.White)
-            Text(text = name, color = Color.White)
+            UpIcon(color = MaterialTheme.colorScheme.onSurface)
+            Text(text = name, color = MaterialTheme.colorScheme.onSurface)
         }
         AnimatedVisibility(visible = isLoggedIn) {
             Row(
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.small)
-                    .background(Color.White.copy(alpha = 0.2f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
                     .focusedBorder(MaterialTheme.shapes.small)
-                    .padding(horizontal = 4.dp, vertical = 3.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
                     .clickable { if (followed) onDelFollow() else onAddFollow() }
-                    .animateContentSize()
+                    .animateContentSize(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 if (followed) {
                     Icon(
                         painter = painterResource(R.drawable.ic_symbol_done_filled),
                         contentDescription = null,
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = stringResource(R.string.video_info_followed),
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 } else {
                     Icon(
                         painter = painterResource(R.drawable.ic_symbol_add_filled),
                         contentDescription = null,
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
-                    Text(text = stringResource(R.string.video_info_follow), color = Color.White)
+                    Text(
+                        text = stringResource(R.string.video_info_follow),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -657,11 +652,7 @@ fun VideoDescription(
     description: String
 ) {
     var hasFocus by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
-    val titleFontSize by animateFloatAsState(
-        targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
-    )
+    val titleColor = focusedTextColor(hasFocus)
     var showDescriptionDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -670,7 +661,7 @@ fun VideoDescription(
     ) {
         Text(
             text = stringResource(R.string.video_info_description_title),
-            fontSize = titleFontSize.sp,
+            style = MaterialTheme.typography.titleLarge,
             color = titleColor
         )
         Box(
@@ -688,7 +679,7 @@ fun VideoDescription(
                 text = description,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -708,13 +699,13 @@ fun VideoDescriptionDialog(
     description: String
 ) {
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier,
             onDismissRequest = { onHideDialog() },
             title = {
                 Text(
                     text = stringResource(R.string.video_info_description_title),
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
@@ -805,11 +796,7 @@ fun VideoPartRow(
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
     var showPartListDialog by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
-    val titleFontSize by animateFloatAsState(
-        targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
-    )
+    val titleColor = focusedTextColor(hasFocus)
 
     Column(
         modifier = modifier
@@ -819,7 +806,7 @@ fun VideoPartRow(
     ) {
         Text(
             text = stringResource(R.string.video_info_part_row_title),
-            fontSize = titleFontSize.sp,
+            style = MaterialTheme.typography.titleLarge,
             color = titleColor
         )
 
@@ -903,11 +890,7 @@ fun VideoUgcSeasonRow(
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
     var showUgcListDialog by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
-    val titleFontSize by animateFloatAsState(
-        targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
-    )
+    val titleColor = focusedTextColor(hasFocus)
 
     Column(
         modifier = modifier
@@ -917,7 +900,7 @@ fun VideoUgcSeasonRow(
     ) {
         Text(
             text = title,
-            fontSize = titleFontSize.sp,
+            style = MaterialTheme.typography.titleLarge,
             color = titleColor
         )
 
@@ -958,7 +941,10 @@ fun VideoUgcSeasonRow(
                 }
             }
 
-            itemsIndexed(items = episodes) { index, episode ->
+            itemsIndexed(
+                items = episodes,
+                key = { _, episode -> episode.cid },
+            ) { index, episode ->
                 VideoPartButton(
                     modifier = Modifier
                         .ifElse(index == 0, Modifier.focusRequester(focusRequester)),
@@ -1014,12 +1000,11 @@ private fun <T> PagedVideoGridDialog(
     }
 
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier,
             title = { Text(text = title) },
             onDismissRequest = { onHideDialog() },
             confirmButton = {},
-            properties = DialogProperties(usePlatformDefaultWidth = false),
             text = {
                 Column(
                     modifier = Modifier.size(600.dp, 330.dp),
@@ -1048,7 +1033,7 @@ private fun <T> PagedVideoGridDialog(
                                 ) {
                                     Text(
                                         text = "P${i * 20 + 1}-${(i + 1) * 20}",
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.labelLarge,
                                         color = LocalContentColor.current,
                                         modifier = Modifier.padding(
                                             horizontal = 16.dp,

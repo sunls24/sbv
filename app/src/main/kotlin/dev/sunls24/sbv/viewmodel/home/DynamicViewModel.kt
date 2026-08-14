@@ -10,7 +10,6 @@ import dev.sunls24.biliapi.entity.user.DynamicVideo
 import dev.sunls24.biliapi.http.entity.AuthFailureException
 import dev.sunls24.biliapi.repositories.UserRepository
 import dev.sunls24.sbv.SBVApp
-import dev.sunls24.sbv.BuildConfig
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.util.toast
 import kotlinx.coroutines.CancellationException
@@ -27,6 +26,7 @@ class DynamicViewModel(
     private val userRepository: UserRepository
 ) : ViewModel() {
     val dynamicList = mutableStateListOf<DynamicVideo>()
+    private val loadedVideoIds = mutableSetOf<Long>()
 
     private var currentPage = 0
     var loading by mutableStateOf(false)
@@ -59,6 +59,7 @@ class DynamicViewModel(
         loadJob?.cancel()
         loadJob = null
         dynamicList.clear()
+        loadedVideoIds.clear()
         currentPage = 0
         historyOffset = null
         hasMore = true
@@ -81,7 +82,7 @@ class DynamicViewModel(
                 }
                 if (version != requestVersion) return@launch
                 currentPage = nextPage
-                dynamicList.addAll(data.videos)
+                dynamicList.addAll(data.videos.filter { loadedVideoIds.add(it.aid) })
                 historyOffset = data.historyOffset
                 hasMore = data.hasMore
                 initialized = true
@@ -92,7 +93,7 @@ class DynamicViewModel(
                     is AuthFailureException -> {
                         SBVApp.context.getString(R.string.exception_auth_failure)
                             .toast(SBVApp.context)
-                        if (!BuildConfig.DEBUG) sbvUserRepository.logout()
+                        sbvUserRepository.logout()
                     }
 
                     else -> {

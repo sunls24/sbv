@@ -1,7 +1,6 @@
 package dev.sunls24.sbv.viewmodel.search
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -10,7 +9,6 @@ import dev.sunls24.biliapi.entity.search.Hotword
 import dev.sunls24.biliapi.repositories.SearchRepository
 import dev.sunls24.sbv.SBVApp
 import dev.sunls24.sbv.util.Prefs
-import dev.sunls24.sbv.util.swapListWithMainContext
 import dev.sunls24.sbv.util.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -27,9 +25,12 @@ class SearchInputViewModel(
 ) : ViewModel() {
 
     var keyword by mutableStateOf("")
-    val hotwords = mutableStateListOf<Hotword>()
-    val suggests = mutableStateListOf<String>()
-    val searchHistories = mutableStateListOf<String>()
+    var hotwords by mutableStateOf<List<Hotword>>(emptyList())
+        private set
+    var suggests by mutableStateOf<List<String>>(emptyList())
+        private set
+    var searchHistories by mutableStateOf<List<String>>(emptyList())
+        private set
     private var suggestJob: Job? = null
 
     init {
@@ -40,7 +41,11 @@ class SearchInputViewModel(
     private fun updateHotwords() {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { searchRepository.getSearchHotwords(limit = 50) }
-                .onSuccess { hotwords.swapListWithMainContext(it) }
+                .onSuccess { result ->
+                    withContext(Dispatchers.Main) {
+                        hotwords = result.distinctBy(Hotword::showName)
+                    }
+                }
                 .onFailure {
                     withContext(Dispatchers.Main) { "bilibili 热搜加载失败".toast(SBVApp.context) }
                 }
@@ -51,23 +56,21 @@ class SearchInputViewModel(
         suggestJob?.cancel()
         val requestedKeyword = keyword.trim()
         if (requestedKeyword.isEmpty()) {
-            suggests.clear()
+            suggests = emptyList()
             return
         }
 
         suggestJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                delay(250)
+                delay(300)
                 val result = searchRepository.getSearchSuggest(requestedKeyword)
                 if (keyword.trim() == requestedKeyword) {
-                    suggests.swapListWithMainContext(result)
+                    withContext(Dispatchers.Main) { suggests = result.distinct() }
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                withContext(Dispatchers.Main) {
-                    "bilibili 搜索建议加载失败".toast(SBVApp.context)
-                }
+                // 自动补全失败不打断输入，也不重复弹出提示。
             }
         }
     }
@@ -76,8 +79,7 @@ class SearchInputViewModel(
         val histories = runCatching {
             Json.decodeFromString<List<String>>(Prefs.searchHistoryJson)
         }.getOrDefault(emptyList())
-        searchHistories.clear()
-        searchHistories.addAll(histories)
+        searchHistories = histories
     }
 
     private fun saveSearchHistories() {
@@ -87,19 +89,18 @@ class SearchInputViewModel(
     fun addSearchHistory(keyword: String) {
         val normalized = keyword.trim()
         if (normalized.isEmpty()) return
-        searchHistories.remove(normalized)
-        searchHistories.add(0, normalized)
-        while (searchHistories.size > 20) searchHistories.removeAt(searchHistories.lastIndex)
+        searchHistories = (listOf(normalized) + searchHistories.filterNot { it == normalized })
+            .take(20)
         saveSearchHistories()
     }
 
     fun deleteSearchHistory(history: String) {
-        searchHistories.remove(history)
+        searchHistories = searchHistories.filterNot { it == history }
         saveSearchHistories()
     }
 
     fun deleteAllSearchHistories() {
-        searchHistories.clear()
+        searchHistories = emptyList()
         saveSearchHistories()
     }
 }

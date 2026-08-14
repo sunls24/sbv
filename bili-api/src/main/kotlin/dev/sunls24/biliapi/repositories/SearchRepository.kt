@@ -21,27 +21,18 @@ class SearchRepository(
         buvid = authRepository.buvid.orEmpty()
     ).suggests.map { it.value }
 
-    /**
-     * 按分类进行搜索
-     *
-     * app 端的接口无法对视频投稿结果进行筛选搜索
-     */
+    /** 按类型进行搜索 */
     suspend fun searchType(
         keyword: String,
         type: SearchType,
-        tid: Int?,
-        order: SearchFilterOrderType,
-        duration: SearchFilterDuration,
         page: SearchTypePage
     ): SearchTypeResult {
         val response = BiliHttpApi.searchType(
             keyword = keyword,
             type = type.httpTypeParam,
             page = page.nextPage,
-            tid = tid,
-            order = order.httpOrderParam,
-            duration = duration.httpDurationParam,
-            buvid3 = authRepository.buvid3.orEmpty()
+            buvid3 = authRepository.buvid3.orEmpty(),
+            sessData = authRepository.sessionData,
         ).getResponseData()
         return SearchTypeResult.fromSearchTypeResult(response)
     }
@@ -54,30 +45,6 @@ enum class SearchType(val httpTypeParam: String) {
     MediaBangumi("media_bangumi"),
     MediaFt("media_ft"),
     BiliUser("bili_user")
-}
-
-enum class SearchFilterOrderType(val httpOrderParam: String?) {
-    ComprehensiveSort(null),
-    MostClicks("click"),
-    LatestPublish("pubdate"),
-    MostDanmaku("dm"),
-    MostFavorites("stow");
-
-    companion object {
-        val webFilters =
-            listOf(ComprehensiveSort, MostClicks, LatestPublish, MostDanmaku, MostFavorites)
-    }
-}
-
-enum class SearchFilterDuration(
-    val httpDurationParam: Int?,
-    //val grpcOrderParam: SearchByTypeRequest.
-) {
-    All(null),
-    LessThan10Minutes(1),
-    Between10And30Minutes(2),
-    Between30And60Minutes(3),
-    MoreThan60Minutes(4);
 }
 
 data class SearchTypeResult(
