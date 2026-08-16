@@ -23,6 +23,7 @@ class PopularViewModel(
     private val recommendVideoRepository: RecommendVideoRepository
 ) : ViewModel() {
     val popularVideoList = mutableStateListOf<UgcItem>()
+    private val loadedAids = mutableSetOf<Long>()
 
     private var nextPage = PopularVideoPage()
     var loading by mutableStateOf(false)
@@ -46,6 +47,7 @@ class PopularViewModel(
         requestVersion++
         loadJob?.cancel()
         popularVideoList.clear()
+        loadedAids.clear()
         nextPage = PopularVideoPage()
         initialized = false
         hasMore = true
@@ -58,14 +60,24 @@ class PopularViewModel(
         loading = true
         loadJob = viewModelScope.launch {
             try {
-                val page = nextPage
-                val data = withContext(Dispatchers.IO) {
-                    recommendVideoRepository.getPopularVideos(page)
+                var requestCount = 0
+                var newItems = emptyList<UgcItem>()
+                while (
+                    requestCount < MAX_PAGE_REQUESTS_PER_LOAD &&
+                    newItems.isEmpty() &&
+                    hasMore
+                ) {
+                    val page = nextPage
+                    val data = withContext(Dispatchers.IO) {
+                        recommendVideoRepository.getPopularVideos(page)
+                    }
+                    if (version != requestVersion) return@launch
+                    nextPage = data.nextPage
+                    hasMore = !data.noMore
+                    newItems = data.list.filter { loadedAids.add(it.aid) }
+                    requestCount++
                 }
-                if (version != requestVersion) return@launch
-                nextPage = data.nextPage
-                popularVideoList.addAll(data.list)
-                hasMore = !data.noMore
+                popularVideoList.addAll(newItems)
                 initialized = true
             } catch (error: CancellationException) {
                 throw error
@@ -78,5 +90,9 @@ class PopularViewModel(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val MAX_PAGE_REQUESTS_PER_LOAD = 2
     }
 }

@@ -63,6 +63,7 @@ private const val TitleMarqueeFocusDelayMillis = 250L
 @Composable
 fun SmallVideoCard(
     modifier: Modifier = Modifier,
+    focusModifier: Modifier = Modifier,
     data: VideoCardData,
     delToView: Boolean = false,
     compactActions: Boolean = false,
@@ -108,7 +109,7 @@ fun SmallVideoCard(
                 if (hasAnyAction) showActions = true
 
             },
-            modifier = Modifier
+            modifier = focusModifier
                 .fillMaxWidth()
                 .aspectRatio(1.6f)
                 .onFocusChanged { focusState ->

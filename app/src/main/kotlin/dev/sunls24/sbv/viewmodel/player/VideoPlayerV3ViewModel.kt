@@ -5,20 +5,13 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import com.kuaishou.akdanmaku.DanmakuConfig
-import com.kuaishou.akdanmaku.data.DanmakuItemData
-import com.kuaishou.akdanmaku.ecs.component.filter.TypeFilter
-import com.kuaishou.akdanmaku.render.SimpleRenderer
 import com.kuaishou.akdanmaku.ui.DanmakuPlayer
-import dev.sunls24.biliapi.entity.PlayData
 import dev.sunls24.biliapi.http.BiliHttpApi
 import dev.sunls24.biliapi.repositories.VideoPlayRepository
 import dev.sunls24.biliapi.repositories.AuthRepository
@@ -34,6 +27,9 @@ import dev.sunls24.sbv.entity.VideoCodec
 import dev.sunls24.sbv.entity.VideoListItem
 import dev.sunls24.sbv.player.SBVPlayer
 import dev.sunls24.sbv.player.SBVPlayerOptions
+import dev.sunls24.sbv.player.PlaybackResourceLoader
+import dev.sunls24.sbv.player.PlaybackResources
+import dev.sunls24.sbv.player.DanmakuSession
 import dev.sunls24.sbv.repository.VideoInfoRepository
 import dev.sunls24.sbv.repository.PlaybackProgress
 import dev.sunls24.sbv.repository.PlaybackProgressReporter
@@ -77,15 +73,13 @@ class VideoPlayerV3ViewModel(
     var danmakuPlayer: DanmakuPlayer? by mutableStateOf(null)
         private set
 
-    private var playData: PlayData? = null
+    private val playbackResourceLoader = PlaybackResourceLoader(videoPlayRepository)
+    private val danmakuSession = DanmakuSession()
     private var initialized = false
     val isInitialized: Boolean get() = initialized
     private var relatedLoadedAid = 0L
 
     private val detachedWorkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private var danmakuConfig = DanmakuConfig()
-    private val danmakuTypeFilter = TypeFilter()
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState = _uiState.asStateFlow()
@@ -107,6 +101,8 @@ class VideoPlayerV3ViewModel(
         override fun onPlayerError(error: PlaybackException) {
             _uiState.update {
                 it.copy(
+                    isBuffering = false,
+                    isRetrying = false,
                     playerState = PlayerState.Error(
                         error.message ?: "Unknown error"
                     )
@@ -117,23 +113,32 @@ class VideoPlayerV3ViewModel(
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_IDLE -> {
-                    danmakuPlayer?.pause()
+                    danmakuSession.pause()
                     stopSeekerUpdater()
-                    _uiState.update { it.copy(isBuffering = false) }
+                    _uiState.update {
+                        if (it.isRetrying) it else it.copy(isBuffering = false)
+                    }
                 }
                 Player.STATE_BUFFERING -> {
-                    danmakuPlayer?.pause()
+                    danmakuSession.pause()
                     _uiState.update { it.copy(isBuffering = true) }
                 }
                 Player.STATE_READY -> {
-                    _uiState.update { it.copy(playerState = PlayerState.Ready) }
+                    _uiState.update {
+                        it.copy(
+                            playerState = PlayerState.Ready,
+                            isBuffering = false,
+                            isRetrying = false,
+                        )
+                    }
                     applyPlaySpeed(_uiState.value.playSpeed)
-                    startSeekerUpdater()
                 }
                 Player.STATE_ENDED -> {
-                    danmakuPlayer?.pause()
+                    danmakuSession.pause()
                     stopSeekerUpdater()
-                    _uiState.update { it.copy(playerState = PlayerState.Ended) }
+                    _uiState.update {
+                        it.copy(playerState = PlayerState.Ended, isRetrying = false)
+                    }
                     viewModelScope.launch {
                         _uiEffect.emit(PlayerUiEffect.PlayEnded)
                     }
@@ -143,15 +148,26 @@ class VideoPlayerV3ViewModel(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) {
-                danmakuPlayer?.start()
-                _uiState.update { it.copy(playerState = PlayerState.Playing, isBuffering = false) }
+                danmakuSession.start()
+                startSeekerUpdater()
+                _uiState.update {
+                    it.copy(
+                        playerState = PlayerState.Playing,
+                        isBuffering = false,
+                        isRetrying = false,
+                    )
+                }
                 if (_uiState.value.lastPlayed > 0) {
                     seekToLastPlayed()
                     _uiState.update { it.copy(lastPlayed = 0) }
                 }
             } else {
-                danmakuPlayer?.pause()
-                if (_uiState.value.playerState != PlayerState.Ended) {
+                danmakuSession.pause()
+                stopSeekerUpdater()
+                if (_uiState.value.playerState != PlayerState.Ended &&
+                    !_uiState.value.isRetrying &&
+                    _uiState.value.playerState !is PlayerState.Error
+                ) {
                     _uiState.update { it.copy(playerState = PlayerState.Paused) }
                 }
             }
@@ -251,7 +267,24 @@ class VideoPlayerV3ViewModel(
     }
 
     fun showInitializationError(message: String) {
-        _uiState.update { it.copy(playerState = PlayerState.Error(message)) }
+        _uiState.update {
+            it.copy(
+                isBuffering = false,
+                isRetrying = false,
+                playerState = PlayerState.Error(message),
+            )
+        }
+    }
+
+    fun beginInitializationRetry(): Boolean {
+        if (initialized || _uiState.value.isRetrying) return false
+        _uiState.update {
+            it.copy(
+                isBuffering = true,
+                isRetrying = true,
+            )
+        }
+        return true
     }
 
     fun initVideoPlayer(context: Context) {
@@ -269,6 +302,8 @@ class VideoPlayerV3ViewModel(
     }
 
     fun detachPlayer() {
+        loadVideoJob?.cancel()
+        loadVideoJob = null
         syncProgress(scope = detachedWorkScope, isDetaching = true)
 
         videoPlayer?.release()
@@ -277,16 +312,16 @@ class VideoPlayerV3ViewModel(
 
     fun initDanmakuPlayer() {
         if (danmakuPlayer != null) return
-        danmakuPlayer = DanmakuPlayer(SimpleRenderer())
-        initDanmakuConfig()
+        danmakuPlayer = danmakuSession.initialize(_uiState.value.danmakuState)
     }
 
     fun releaseDanmakuPlayer() {
-        danmakuPlayer?.release()
+        danmakuSession.release()
         danmakuPlayer = null
     }
 
     override fun onCleared() {
+        loadVideoJob?.cancel()
         videoPlayer?.release()
         videoPlayer = null
         releaseDanmakuPlayer()
@@ -335,7 +370,7 @@ class VideoPlayerV3ViewModel(
 
     private fun applyPlaySpeed(speed: Float) {
         videoPlayer?.speed = speed
-        danmakuPlayer?.updatePlaySpeed(speed)
+        danmakuSession.updatePlaySpeed(speed)
     }
 
     fun updateVideoAspectRatio(aspectRatio: VideoAspectRatio) {
@@ -346,22 +381,8 @@ class VideoPlayerV3ViewModel(
 
     fun updateMediaProfile(action: MediaProfileSettingAction) {
         val old = _uiState.value.mediaProfileState
-        val codecSelection = if (action is MediaProfileSettingAction.SetQuality) {
-            playData?.let {
-                selectVideoCodec(
-                    playData = it,
-                    qualityId = action.value,
-                    preferredCodec = old.videoCodec
-                )
-            }
-        } else {
-            null
-        }
         val new = when (action) {
-            is MediaProfileSettingAction.SetQuality -> old.copy(
-                qualityId = action.value,
-                videoCodec = codecSelection?.selected ?: old.videoCodec
-            )
+            is MediaProfileSettingAction.SetQuality -> old.copy(qualityId = action.value)
             is MediaProfileSettingAction.SetVideoCodec -> old.copy(videoCodec = action.value)
             is MediaProfileSettingAction.SetAudio -> old.copy(audio = action.value)
         }
@@ -371,26 +392,17 @@ class VideoPlayerV3ViewModel(
         _uiState.update {
             it.copy(
                 mediaProfileState = new,
-                availableVideoCodec = codecSelection?.available ?: it.availableVideoCodec
             )
         }
 
         videoPlayer?.let { player ->
+            val currentPosition = _seekerState.value.currentTime.coerceAtLeast(0L)
+            val shouldPlay = player.isPlaying || _uiState.value.playerState == PlayerState.Playing
             player.pause()
-            val currentPosition = player.currentPosition
-
-            // 解析新配置下的 URL
-            val mediaUrls = resolveMediaUrls(new.qualityId, new.videoCodec, new.audio)
-
-            if (mediaUrls != null) {
-                // 执行播放逻辑
-                player.setMedia(mediaUrls.videoUrl, mediaUrls.audioUrl)
-                player.prepare()
-                if (currentPosition > 0) {
-                    player.seekTo(currentPosition)
-                }
-                player.play()
-            }
+            loadVideoWithResources(
+                startPosition = currentPosition,
+                autoPlay = shouldPlay
+            )
         }
     }
 
@@ -408,22 +420,19 @@ class VideoPlayerV3ViewModel(
 
         // 首先更新UI
         _uiState.update { it.copy(danmakuState = new) }
+        danmakuSession.updateSettings(old, new)
 
         // ===== 副作用处理 =====
         if (new.enabledTypes != old.enabledTypes) {
-            updateDanmakuConfigTypeFilter(new.enabledTypes)
             Prefs.defaultDanmakuTypes = new.enabledTypes
         }
         if (new.scale != old.scale) {
-            applyDanmakuConfig(danmakuConfig.copy(textSizeScale = new.scale))
             Prefs.defaultDanmakuScale = new.scale
         }
         if (new.speedFactor != old.speedFactor) {
-            danmakuPlayer?.setDanmakuRollingSpeed(new.speedFactor)
             Prefs.defaultDanmakuSpeedFactor = new.speedFactor
         }
         if (new.area != old.area) {
-            applyDanmakuConfig(danmakuConfig.copy(screenPart = new.area))
             Prefs.defaultDanmakuArea = new.area
         }
         if (new.opacity != old.opacity) {
@@ -527,9 +536,10 @@ class VideoPlayerV3ViewModel(
         _uiState.update { it.copy(showBackToStart = false) }
 
         videoPlayer?.seekTo(0)
-        danmakuPlayer?.seekTo(0)
+        _seekerState.update { it.copy(currentTime = 0L) }
+        danmakuSession.seekTo(0)
         // akdanmaku 会在跳转后立即播放，如果需要缓冲则会导致弹幕不同步
-        danmakuPlayer?.pause()
+        danmakuSession.pause()
     }
 
     /**
@@ -550,9 +560,9 @@ class VideoPlayerV3ViewModel(
     fun seekToTime(time: Long) {
         videoPlayer?.seekTo(time)
         _seekerState.update { it.copy(currentTime = time) }
-        danmakuPlayer?.seekTo(time)
+        danmakuSession.seekTo(time)
         // akdanmaku 会在跳转后立即播放，如果需要缓冲则会导致弹幕不同步
-        danmakuPlayer?.pause()
+        danmakuSession.pause()
     }
 
     fun playNewVideo(newVideo: VideoListItem) {
@@ -576,6 +586,9 @@ class VideoPlayerV3ViewModel(
         releaseDanmakuPlayer()
         initDanmakuPlayer()
 
+        // 新视频不继承上一个视频的进度或续播位置
+        _seekerState.value = SeekerState()
+
         // 更新UiState
         _uiState.update {
             it.copy(
@@ -584,6 +597,9 @@ class VideoPlayerV3ViewModel(
                 epid = newVideo.epid,
                 seasonId = newVideo.seasonId ?: 0,
                 title = newVideo.title,
+                authorMid = newVideo.authorMid ?: it.authorMid,
+                authorName = newVideo.authorName ?: it.authorName,
+                lastPlayed = 0,
                 isBuffering = true,
                 subtitleList = emptyList(),
                 subtitleData = emptyList(),
@@ -600,22 +616,62 @@ class VideoPlayerV3ViewModel(
         syncProgress(scope = viewModelScope, updateLocal = false)
     }
 
-    fun loadVideoWithResources() {
+    fun loadVideoWithResources(
+        startPosition: Long = 0L,
+        autoPlay: Boolean = true,
+        randomizeCdn: Boolean = false,
+    ) {
         val state = _uiState.value
         val avid = state.aid
         val cid = state.cid
         val epid = state.epid
+        val fromSeason = state.fromSeason
+        val profile = state.mediaProfileState
 
         loadVideoJob?.cancel()
+        _uiState.update { current ->
+            if (current.aid == avid && current.cid == cid) {
+                current.copy(
+                    isBuffering = true,
+                    isRetrying = randomizeCdn,
+                    playerState = if (randomizeCdn) {
+                        current.playerState
+                    } else {
+                        PlayerState.Ready
+                    }
+                )
+            } else {
+                current
+            }
+        }
         loadVideoJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val mediaUrls = loadMediaUrls(avid, cid, epid ?: 0)
-                withContext(Dispatchers.Main) {
+                val resources = loadMediaResources(
+                    avid = avid,
+                    cid = cid,
+                    epid = epid ?: 0,
+                    fromSeason = fromSeason,
+                    profile = profile,
+                    randomizeCdn = randomizeCdn,
+                )
+                val shouldContinue = withContext(Dispatchers.Main) {
+                    if (!isCurrentMediaRequest(avid, cid, profile) || videoPlayer == null) {
+                        return@withContext false
+                    }
+
                     val player = checkNotNull(videoPlayer) { "Video player is not initialized" }
-                    player.setMedia(mediaUrls.videoUrl, mediaUrls.audioUrl)
+                    applyPlaybackResources(resources)
+                    player.setMedia(resources.media.videoUrl, resources.media.audioUrl)
                     player.prepare()
-                    player.play()
+                    if (startPosition > 0L) {
+                        player.seekTo(startPosition)
+                    }
+                    if (autoPlay) {
+                        player.play()
+                    }
+                    true
                 }
+                if (!shouldContinue) return@launch
 
                 launch {
                     updateSubtitle()
@@ -631,10 +687,17 @@ class VideoPlayerV3ViewModel(
             } catch (e: CancellationException) {
                 throw e // 让结构化并发正常取消，不作为播放错误处理
             } catch (e: Exception) {
+                if (videoPlayer == null || !isCurrentMediaRequest(avid, cid, profile)) {
+                    return@launch
+                }
                 Log.e("VideoPlayer", "Video loading failed", e)
 
                 _uiState.update {
-                    it.copy(playerState = PlayerState.Error(e.message ?: "未知错误"))
+                    it.copy(
+                        isBuffering = false,
+                        isRetrying = false,
+                        playerState = PlayerState.Error(e.message ?: "未知错误")
+                    )
                 }
             }
         }
@@ -651,177 +714,70 @@ class VideoPlayerV3ViewModel(
             }
     }
 
-    private suspend fun loadMediaUrls(
+    private suspend fun loadMediaResources(
         avid: Long,
         cid: Long,
-        epid: Int = 0
-    ): MediaUrls {
-        val playData = fetchPlayData(avid, cid, epid)
-        this.playData = playData
+        epid: Int,
+        fromSeason: Boolean,
+        profile: MediaProfileState,
+        randomizeCdn: Boolean,
+    ): PlaybackResources = playbackResourceLoader.load(
+        aid = avid,
+        cid = cid,
+        epid = epid,
+        fromSeason = fromSeason,
+        preferredQuality = profile.qualityId,
+        preferredCodec = profile.videoCodec,
+        preferredAudio = profile.audio,
+        randomizeCdn = randomizeCdn,
+    )
 
-        val resolutionMap = playData.dashVideos.associate { video ->
-            video.quality to Resolution.fromCode(video.quality)
+    private fun applyPlaybackResources(resources: PlaybackResources) {
+        val resolutionMap = resources.qualities.associateWith { quality ->
+            Resolution.fromCode(quality)
                 .getShortDisplayName(SBVApp.context)
         }
-        val availableAudioList = buildList {
-            addAll(playData.dashAudios.map { Audio.fromCode(it.codecId) })
-            playData.dolby?.let { add(Audio.fromCode(it.codecId)) }
-            playData.flac?.let { add(Audio.fromCode(it.codecId)) }
-        }.distinct()
-        val targetQualityId =
-            calculateTargetQuality(resolutionMap.keys, Prefs.defaultQuality.code)
-        val targetAudio = calculateTargetAudio(availableAudioList, Prefs.defaultAudio)
-        val codecSelection = selectVideoCodec(
-            playData = playData,
-            qualityId = targetQualityId,
-            preferredCodec = Prefs.defaultVideoCodec
-        )
 
         _uiState.update {
             it.copy(
                 availableQuality = resolutionMap,
-                availableAudio = availableAudioList,
-                availableVideoCodec = codecSelection.available,
+                availableAudio = resources.audio,
+                availableVideoCodec = resources.codecs,
+                videoHeight = resources.media.height,
+                videoWidth = resources.media.width,
                 mediaProfileState = it.mediaProfileState.copy(
-                    qualityId = targetQualityId,
-                    videoCodec = codecSelection.selected,
-                    audio = targetAudio
+                    qualityId = resources.selectedQuality,
+                    videoCodec = resources.selectedCodec,
+                    audio = resources.selectedAudio
                 )
             )
         }
 
-        if (playData.needPay) startShowPreviewTipCountdown()
-
-        return resolveMediaUrls(
-            qn = targetQualityId,
-            codec = codecSelection.selected,
-            audio = targetAudio
-        ) ?: throw IllegalStateException("视频源解析失败")
+        if (resources.needPay) startShowPreviewTipCountdown()
     }
 
-    private suspend fun fetchPlayData(avid: Long, cid: Long, epid: Int): PlayData {
-        return if (_uiState.value.fromSeason) {
-            videoPlayRepository.getPgcPlayData(
-                aid = avid,
-                cid = cid,
-                epid = epid,
-                preferCodec = Prefs.defaultVideoCodec.toBiliApiCodeType()
-            )
-        } else {
-            videoPlayRepository.getPlayData(
-                aid = avid,
-                cid = cid,
-                preferCodec = Prefs.defaultVideoCodec.toBiliApiCodeType()
-            )
-        }
-    }
-
-    private fun calculateTargetQuality(availableQualities: Set<Int>, defaultQualityCode: Int): Int {
-        if (availableQualities.contains(defaultQualityCode)) return defaultQualityCode
-
-        val sortedQualities = availableQualities.sorted()
-        return sortedQualities.findLast { it <= defaultQualityCode }
-            ?: sortedQualities.firstOrNull()
-            ?: 0
-    }
-
-    private fun calculateTargetAudio(availableAudio: List<Audio>, defaultAudio: Audio): Audio {
-        if (availableAudio.contains(defaultAudio)) return defaultAudio
-
-        // Fallback 逻辑
-        return when {
-            defaultAudio == Audio.ADolbyAtoms && availableAudio.contains(Audio.AHiRes) -> Audio.AHiRes
-            defaultAudio == Audio.AHiRes && availableAudio.contains(Audio.ADolbyAtoms) -> Audio.ADolbyAtoms
-            availableAudio.contains(Audio.A192K) -> Audio.A192K
-            availableAudio.contains(Audio.A132K) -> Audio.A132K
-            availableAudio.contains(Audio.A64K) -> Audio.A64K
-            else -> availableAudio.firstOrNull() ?: Audio.A132K
-        }
-    }
-
-    private fun selectVideoCodec(
-        playData: PlayData,
-        qualityId: Int,
-        preferredCodec: VideoCodec
-    ): VideoCodecSelection {
-        val codecs = playData.codec[qualityId]
-            ?.mapNotNull(VideoCodec::fromCodecString)
-            ?.distinct()
-            ?.takeIf { it.isNotEmpty() }
-            ?: playData.dashVideos
-                .filter { it.quality == qualityId }
-                .map { video ->
-                    video.codecs
-                        ?.let(VideoCodec::fromCodecString)
-                        ?: VideoCodec.fromCodecId(video.codecId)
-                }
-                .distinct()
-
-        val selected = preferredCodec.takeIf(codecs::contains)
-            ?: codecs.minByOrNull(VideoCodec::ordinal)
-            ?: preferredCodec
-        return VideoCodecSelection(available = codecs, selected = selected)
-    }
-
-    private fun resolveMediaUrls(
-        qn: Int,
-        codec: VideoCodec,
-        audio: Audio
-    ): MediaUrls? {
-        val currentPlayData = playData ?: return null
-
-        val foundVideoItem = currentPlayData.dashVideos.find {
-            val codecs = it.codecs
-            it.quality == qn &&
-                    (codecs.isNullOrEmpty() || codecs.startsWith(codec.prefix))
-        }
-
-        val actualVideoItem = foundVideoItem ?: currentPlayData.dashVideos.firstOrNull()
-            ?: return null
-
-        val videoUrl = actualVideoItem.baseUrl
-
-        val audioItem = currentPlayData.dashAudios.find { it.codecId == audio.code }
-            ?: currentPlayData.dolby.takeIf { it?.codecId == audio.code }
-            ?: currentPlayData.flac.takeIf { it?.codecId == audio.code }
-            ?: currentPlayData.dashAudios.minByOrNull { it.codecId }
-
-        val audioUrl = audioItem?.baseUrl
-
-
-        _uiState.update {
-            it.copy(
-                videoHeight = actualVideoItem.height,
-                videoWidth = actualVideoItem.width
-            )
-        }
-
-        return MediaUrls(videoUrl, audioUrl)
+    private fun isCurrentMediaRequest(
+        aid: Long,
+        cid: Long,
+        profile: MediaProfileState
+    ): Boolean {
+        val state = _uiState.value
+        return state.aid == aid &&
+            state.cid == cid &&
+            state.mediaProfileState == profile
     }
 
     private suspend fun loadDanmaku(cid: Long) {
         runCatching {
             val danmakuXmlData = BiliHttpApi.getDanmakuXml(
                 cid = cid,
-                sessData = authRepository.sessionData.orEmpty()
+                sessData = authRepository.sessionData.orEmpty(),
+                transform = danmakuSession::toItemData
             )
 
-            danmakuXmlData.data.map {
-                DanmakuItemData(
-                    danmakuId = it.dmid,
-                    position = (it.time * 1000).toLong(),
-                    content = it.text,
-                    mode = when (it.type) {
-                        4 -> DanmakuItemData.DANMAKU_MODE_CENTER_BOTTOM
-                        5 -> DanmakuItemData.DANMAKU_MODE_CENTER_TOP
-                        else -> DanmakuItemData.DANMAKU_MODE_ROLLING
-                    },
-                    textSize = it.size,
-                    textColor = Color(it.color).toArgb()
-                )
-            }
-        }.onSuccess { list ->
-            danmakuPlayer?.updateData(list)
+            danmakuXmlData.data
+        }.onSuccess { data ->
+            danmakuSession.updateData(data)
         }
     }
 
@@ -867,53 +823,6 @@ class VideoPlayerV3ViewModel(
             updateLocal = updateLocal,
             timeoutMillis = 3000L.takeIf { isDetaching }
         )
-    }
-
-    private fun initDanmakuConfig() {
-        val danmakuTypes = Prefs.defaultDanmakuTypes
-        val area = Prefs.defaultDanmakuArea
-        val scale = Prefs.defaultDanmakuScale
-        val factor = Prefs.defaultDanmakuSpeedFactor
-
-        rebuildDanmakuTypeFilter(danmakuTypes)
-        danmakuConfig = danmakuConfig.copy(
-            density = 120,
-            textSizeScale = scale,
-            screenPart = area,
-            dataFilter = listOf(danmakuTypeFilter),
-            rollingSpeedFactor = factor
-        )
-        danmakuConfig.updateFilter()
-        danmakuPlayer?.updateConfig(danmakuConfig)
-    }
-
-    private fun updateDanmakuConfigTypeFilter(enabledDanmakuTypes: List<DanmakuType>) {
-        rebuildDanmakuTypeFilter(enabledDanmakuTypes)
-        danmakuConfig.updateFilter()
-        danmakuPlayer?.updateConfig(danmakuConfig)
-    }
-
-    private fun rebuildDanmakuTypeFilter(enabledDanmakuTypes: List<DanmakuType>) {
-        danmakuTypeFilter.clear()
-
-        DanmakuType.entries
-            .filterNot(enabledDanmakuTypes::contains)
-            .map {
-                when (it) {
-                    DanmakuType.Rolling -> DanmakuItemData.DANMAKU_MODE_ROLLING
-                    DanmakuType.Top -> DanmakuItemData.DANMAKU_MODE_CENTER_TOP
-                    DanmakuType.Bottom -> DanmakuItemData.DANMAKU_MODE_CENTER_BOTTOM
-                }
-            }
-            .forEach(danmakuTypeFilter::addFilterItem)
-    }
-
-    private fun applyDanmakuConfig(config: DanmakuConfig) {
-        danmakuConfig = config
-        danmakuPlayer?.updateConfig(danmakuConfig)
-
-        // 更新弹幕库之后updateConfig会导致滚动速度被重置，所以这里需要重新设置
-        danmakuPlayer?.setDanmakuRollingSpeed(_uiState.value.danmakuState.speedFactor)
     }
 
     private fun findNextPlayTarget(): VideoListItem? {
@@ -984,9 +893,9 @@ class VideoPlayerV3ViewModel(
         val time = _uiState.value.lastPlayed.toLong()
 
         videoPlayer?.seekTo(time)
-        danmakuPlayer?.seekTo(time)
+        danmakuSession.seekTo(time)
         // akdanmaku 会在跳转后立即播放，如果需要缓冲则会导致弹幕不同步
-        danmakuPlayer?.pause()
+        danmakuSession.pause()
 
         _uiState.update { it.copy(showBackToStart = true) }
 
@@ -1016,15 +925,6 @@ class VideoPlayerV3ViewModel(
         }
     }
 
-    private data class VideoCodecSelection(
-        val available: List<VideoCodec>,
-        val selected: VideoCodec
-    )
-
-    private data class MediaUrls(
-        val videoUrl: String,
-        val audioUrl: String?
-    )
 }
 
 sealed interface DirectPlaybackInitResult {

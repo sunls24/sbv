@@ -10,12 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -23,6 +29,7 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import dev.sunls24.sbv.R
 import dev.sunls24.sbv.ui.theme.SBVTheme
+import dev.sunls24.sbv.util.requestFocus
 
 @Composable
 fun PlayStateTips(
@@ -30,7 +37,9 @@ fun PlayStateTips(
     isPlaying: Boolean,
     isBuffering: Boolean,
     isError: Boolean,
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    isRetrying: Boolean = false,
+    onRetry: () -> Unit = {},
 ) {
     Box(
         modifier = modifier.fillMaxSize()
@@ -42,17 +51,23 @@ fun PlayStateTips(
                     .padding(24.dp)
             )
         }
-        if (isBuffering && !isError) {
+        if (isRetrying) {
+            BufferingTip(
+                modifier = Modifier.align(Alignment.Center),
+                text = "重试中...",
+            )
+        } else if (isBuffering && !isError) {
             BufferingTip(
                 modifier = Modifier
                     .align(Alignment.Center),
-                speed = ""
+                text = "缓冲中..."
             )
         }
-        if (isError) {
+        if (isError && !isRetrying) {
             PlayErrorTip(
                 modifier = Modifier.align(Alignment.Center),
-                errorMessage = errorMessage
+                errorMessage = errorMessage,
+                onRetry = onRetry,
             )
         }
     }
@@ -83,7 +98,7 @@ fun PauseIcon(
 @Composable
 fun BufferingTip(
     modifier: Modifier = Modifier,
-    speed: String
+    text: String = "缓冲中..."
 ) {
     Surface(
         modifier = modifier,
@@ -105,7 +120,7 @@ fun BufferingTip(
             )
             Text(
                 modifier = Modifier,
-                text = "缓冲中...$speed",
+                text = text,
                 style = MaterialTheme.typography.titleLarge,
             )
         }
@@ -115,8 +130,15 @@ fun BufferingTip(
 @Composable
 fun PlayErrorTip(
     modifier: Modifier = Modifier,
-    errorMessage: String?
+    errorMessage: String?,
+    onRetry: () -> Unit = {},
 ) {
+    val retryFocusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        retryFocusRequester.requestFocus(scope)
+    }
+
     Surface(
         modifier = modifier,
         colors = SurfaceDefaults.colors(
@@ -135,6 +157,14 @@ fun PlayErrorTip(
             Text(text = " _(:з」∠)_")
             Spacer(modifier = Modifier.height(12.dp))
             Text(text = "错误信息：${errorMessage ?: "未知错误"}")
+            Button(
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .focusRequester(retryFocusRequester),
+                onClick = onRetry,
+            ) {
+                Text(text = "重试播放")
+            }
         }
     }
 }
@@ -155,7 +185,6 @@ private fun BufferingTipPreview() {
     SBVTheme {
         BufferingTip(
             modifier = Modifier.padding(10.dp),
-            speed = ""
         )
     }
 }

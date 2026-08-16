@@ -6,16 +6,22 @@ import dev.sunls24.biliapi.entity.user.FollowedUserPage
 import dev.sunls24.biliapi.entity.user.SpaceVideoData
 import dev.sunls24.biliapi.entity.user.SpaceVideoOrder
 import dev.sunls24.biliapi.entity.user.SpaceVideoPage
+import dev.sunls24.biliapi.entity.user.UpProfile
 import dev.sunls24.biliapi.http.BiliHttpApi
 import dev.sunls24.biliapi.http.entity.user.FollowAction
 import dev.sunls24.biliapi.http.entity.user.FollowActionSource
 import dev.sunls24.biliapi.http.entity.user.RelationType
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.koin.core.annotation.Single
 
 @Single
 class UserRepository(
     private val authRepository: AuthRepository
 ) {
+    private val _followingChanges = MutableSharedFlow<FollowingChange>()
+    val followingChanges = _followingChanges.asSharedFlow()
+
     private suspend fun modifyFollow(
         mid: Long,
         action: FollowAction
@@ -27,7 +33,16 @@ class UserRepository(
             csrf = authRepository.biliJct,
             sessData = requireNotNull(authRepository.sessionData)
         )
-        return response.code == 0
+        val success = response.code == 0
+        if (success) {
+            _followingChanges.emit(
+                FollowingChange(
+                    mid = mid,
+                    following = action == FollowAction.AddFollow
+                )
+            )
+        }
+        return success
     }
 
     suspend fun followUser(mid: Long): Boolean = modifyFollow(mid, FollowAction.AddFollow)
@@ -48,6 +63,11 @@ class UserRepository(
             ).contains(response.relation.attribute)
         }.getOrNull()
     }
+
+    suspend fun getUpProfile(mid: Long): UpProfile = BiliHttpApi.getWebUserCard(
+        mid = mid,
+        sessData = authRepository.sessionData
+    ).getResponseData().let { UpProfile.fromWebUserCardData(mid, it) }
 
     suspend fun addSeasonFollow(seasonId: Int): String = BiliHttpApi.addSeasonFollow(
         seasonId = seasonId,
@@ -105,3 +125,8 @@ class UserRepository(
         )
     }
 }
+
+data class FollowingChange(
+    val mid: Long,
+    val following: Boolean
+)

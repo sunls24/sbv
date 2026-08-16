@@ -23,6 +23,7 @@ class RecommendViewModel(
     private val recommendVideoRepository: RecommendVideoRepository
 ) : ViewModel() {
     val recommendVideoList = mutableStateListOf<UgcItem>()
+    private val loadedAids = mutableSetOf<Long>()
 
     private var nextPage = RecommendPage()
     var loading by mutableStateOf(false)
@@ -44,6 +45,7 @@ class RecommendViewModel(
         requestVersion++
         loadJob?.cancel()
         recommendVideoList.clear()
+        loadedAids.clear()
         nextPage = RecommendPage()
         initialized = false
         loading = false
@@ -55,13 +57,19 @@ class RecommendViewModel(
         loading = true
         loadJob = viewModelScope.launch {
             try {
-                val page = nextPage
-                val data = withContext(Dispatchers.IO) {
-                    recommendVideoRepository.getRecommendVideos(page)
+                var requestCount = 0
+                var newItems = emptyList<UgcItem>()
+                while (requestCount < MAX_PAGE_REQUESTS_PER_LOAD && newItems.isEmpty()) {
+                    val page = nextPage
+                    val data = withContext(Dispatchers.IO) {
+                        recommendVideoRepository.getRecommendVideos(page)
+                    }
+                    if (version != requestVersion) return@launch
+                    nextPage = data.nextPage
+                    newItems = data.items.filter { loadedAids.add(it.aid) }
+                    requestCount++
                 }
-                if (version != requestVersion) return@launch
-                nextPage = data.nextPage
-                recommendVideoList.addAll(data.items)
+                recommendVideoList.addAll(newItems)
                 initialized = true
             } catch (error: CancellationException) {
                 throw error
@@ -74,5 +82,9 @@ class RecommendViewModel(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val MAX_PAGE_REQUESTS_PER_LOAD = 2
     }
 }

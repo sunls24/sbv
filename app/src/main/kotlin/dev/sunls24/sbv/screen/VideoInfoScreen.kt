@@ -35,6 +35,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +65,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -102,6 +104,7 @@ import dev.sunls24.sbv.ui.effect.UiEffect
 import dev.sunls24.sbv.ui.effect.VideoDetailUiEffect
 import dev.sunls24.sbv.ui.theme.SBVColorTokens
 import dev.sunls24.sbv.ui.theme.SBVFocus
+import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.ui.theme.SBVTheme
 import dev.sunls24.sbv.ui.theme.focusedTextColor
 import dev.sunls24.sbv.util.focusedBorder
@@ -116,6 +119,7 @@ import dev.sunls24.sbv.viewmodel.video.VideoDetailState
 import dev.sunls24.sbv.viewmodel.video.VideoDetailViewModel
 import dev.sunls24.sbv.viewmodel.video.VideoInfoState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -130,7 +134,9 @@ fun VideoInfoScreen(
 
     val defaultFocusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val uiState by videoDetailViewModel.uiState.collectAsState()
+    var playerLaunchJob by remember { mutableStateOf<Job?>(null) }
 
     var lastPlayedAid by remember(uiState.videoDetailState?.aid) {
         mutableLongStateOf(uiState.videoDetailState?.aid ?: 0L)
@@ -156,54 +162,67 @@ fun VideoInfoScreen(
 
     fun performLaunchPlayer(
         targetAid: Long,
-        targetCid: Long,
-        targetTitle: String
+        requestedCid: Long?,
+        targetTitle: String,
+        replaceVideoList: Boolean = false
     ) {
         val videoDetailState = uiState.videoDetailState ?: return
+        playerLaunchJob?.cancel()
 
-        val playedTime = if (targetCid == videoDetailState.lastPlayedCid) {
-            videoDetailState.lastPlayedTime * 1000
-        } else {
-            0
+        fun launchPlayer(detail: VideoDetailState) {
+            val targetCid = requestedCid
+                ?: detail.lastPlayedCid.takeIf { it != 0L }
+                ?: detail.cid
+            val playedTime = if (targetCid == detail.lastPlayedCid) {
+                detail.lastPlayedTime * 1000
+            } else {
+                0
+            }
+
+            if (replaceVideoList) {
+                videoDetailViewModel.updateVideoList(
+                    listOf(
+                        VideoListItem(
+                            aid = targetAid,
+                            cid = targetCid,
+                            title = targetTitle
+                        )
+                    )
+                )
+            }
+
+            if (lastPlayedAid != targetAid) {
+                videoDetailViewModel.loadVideoDetail(targetAid, includeUserActions = false)
+                lastPlayedAid = targetAid
+            }
+
+            VideoPlayerV3Activity.actionStart(
+                context = context,
+                avid = targetAid,
+                cid = targetCid,
+                title = targetTitle,
+                played = playedTime,
+                fromSeason = false,
+                author = detail.author
+            )
         }
 
-        // 播放其他avid时更新视频详情
-        if (lastPlayedAid != targetAid) {
-            videoDetailViewModel.loadVideoDetail(targetAid, includeUserActions = false)
-            lastPlayedAid = targetAid
+        if (targetAid == videoDetailState.aid && !videoDetailState.historyResolved) {
+            playerLaunchJob = scope.launch {
+                launchPlayer(videoDetailViewModel.awaitHistory(targetAid))
+            }
+            return
         }
-
-        VideoPlayerV3Activity.actionStart(
-            context = context,
-            avid = targetAid,
-            cid = targetCid,
-            title = targetTitle,
-            played = playedTime,
-            fromSeason = false,
-            author = videoDetailState.author
-        )
+        launchPlayer(videoDetailState)
     }
 
     fun playCurrentVideo(cid: Long? = null) {
         val videoDetailState = uiState.videoDetailState ?: return
-        val targetCid = cid ?: videoDetailState.cid
-
-        // 1. 更新播放列表
-        videoDetailViewModel.updateVideoList(
-            listOf(
-                VideoListItem(
-                    aid = videoDetailState.aid,
-                    cid = targetCid,
-                    title = videoDetailState.title,
-                )
-            )
-        )
-
-        // 2. 启动播放器
         performLaunchPlayer(
             targetAid = videoDetailState.aid,
-            targetCid = targetCid,
-            targetTitle = videoDetailState.title
+            requestedCid = cid,
+            targetTitle = videoDetailState.title,
+            replaceVideoList = true
         )
     }
 
@@ -282,7 +301,8 @@ fun VideoInfoScreen(
                                 defaultFocusRequester = defaultFocusRequester,
                                 videoDetail = videoDetailState,
                                 isFollowing = uiState.isFollowingUp,
-                                isLoggedIn = uiState.isLoggedIn,
+                                isFollowingLoading = uiState.followingStateLoading,
+                                showFollowButton = uiState.isLoggedIn && !uiState.isSelfAuthor,
                                 isFavorite = videoDetailState.isFavorite,
                                 isLiked = videoDetailState.isLiked,
                                 isCoined = videoDetailState.isCoined,
@@ -290,7 +310,7 @@ fun VideoInfoScreen(
                                 favoriteFolderIds = uiState.videoFavoriteFolderIds.toList(),
                                 onClickCover = {
                                     // 点击封面播放当前视频
-                                    playCurrentVideo(videoDetailState.lastPlayedCid.takeIf { it != 0L })
+                                    playCurrentVideo()
                                 },
                                 onClickUp = {
                                     UpInfoActivity.actionStart(
@@ -313,9 +333,6 @@ fun VideoInfoScreen(
                                 },
                                 onUpdateLiked = { liked ->
                                     videoDetailViewModel.updateVideoLiked(liked)
-                                },
-                                onSendVideoCoin = {
-                                    videoDetailViewModel.sendVideoCoin()
                                 },
                                 onSendVideoOneClickTripleAction = {
                                     videoDetailViewModel.sendVideoOneClickTripleAction()
@@ -364,7 +381,7 @@ fun VideoInfoScreen(
                                             // 3. 统一调用
                                             performLaunchPlayer(
                                                 targetAid = aid,
-                                                targetCid = cid,
+                                                requestedCid = cid,
                                                 targetTitle = episodeTitle
                                             )
                                         }
@@ -456,8 +473,9 @@ fun VideoInfoData(
     modifier: Modifier = Modifier,
     defaultFocusRequester: FocusRequester,
     videoDetail: VideoDetailState,
-    isFollowing: Boolean,
-    isLoggedIn: Boolean,
+    isFollowing: Boolean?,
+    isFollowingLoading: Boolean,
+    showFollowButton: Boolean,
     isFavorite: Boolean,
     isLiked: Boolean,
     isCoined: Boolean,
@@ -470,7 +488,6 @@ fun VideoInfoData(
     onAddToDefaultFavoriteFolder: () -> Unit,
     onUpdateFavoriteFolders: (List<Long>) -> Unit,
     onUpdateLiked: (Boolean) -> Unit,
-    onSendVideoCoin: () -> Unit,
     onSendVideoOneClickTripleAction: () -> Unit
 ) {
     val localDensity = LocalDensity.current
@@ -491,6 +508,9 @@ fun VideoInfoData(
             onClick = onClickCover,
             shape = ClickableSurfaceDefaults.shape(
                 shape = MaterialTheme.shapes.large,
+            ),
+            scale = ClickableSurfaceDefaults.scale(
+                focusedScale = SBVFocus.focusedScale,
             ),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(
@@ -551,7 +571,8 @@ fun VideoInfoData(
             UpButton(
                 name = videoDetail.author.name,
                 followed = isFollowing,
-                isLoggedIn = isLoggedIn,
+                showFollowButton = showFollowButton,
+                followingStateLoading = isFollowingLoading,
                 onClickUp = onClickUp,
                 onAddFollow = onAddFollow,
                 onDelFollow = onDelFollow
@@ -565,8 +586,7 @@ fun VideoInfoData(
                     onClick = { onUpdateLiked(!isLiked) },
                     onLongClick = { onSendVideoOneClickTripleAction() })
                 CoinButton(
-                    isCoined = isCoined,
-                    onClick = onSendVideoCoin,
+                    isCoined = isCoined
                 )
                 FavoriteButton(
                     isFavorite = isFavorite,
@@ -584,8 +604,9 @@ fun VideoInfoData(
 private fun UpButton(
     modifier: Modifier = Modifier,
     name: String,
-    followed: Boolean,
-    isLoggedIn: Boolean,
+    followed: Boolean?,
+    showFollowButton: Boolean,
+    followingStateLoading: Boolean,
     onClickUp: () -> Unit,
     onAddFollow: () -> Unit,
     onDelFollow: () -> Unit
@@ -608,38 +629,48 @@ private fun UpButton(
             UpIcon(color = MaterialTheme.colorScheme.onSurface)
             Text(text = name, color = MaterialTheme.colorScheme.onSurface)
         }
-        AnimatedVisibility(visible = isLoggedIn) {
+        AnimatedVisibility(visible = showFollowButton) {
             Row(
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.small)
                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
                     .focusedBorder(MaterialTheme.shapes.small)
                     .padding(horizontal = 8.dp, vertical = 6.dp)
-                    .clickable { if (followed) onDelFollow() else onAddFollow() }
+                    .clickable(
+                        enabled = !followingStateLoading
+                    ) {
+                        if (followed == true) onDelFollow() else onAddFollow()
+                    }
                     .animateContentSize(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (followed) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_symbol_done_filled),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = stringResource(R.string.video_info_followed),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_symbol_add_filled),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = stringResource(R.string.video_info_follow),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                when {
+                    followingStateLoading -> {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    }
+                    followed == true -> {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_symbol_done_filled),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(R.string.video_info_followed),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    else -> {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_symbol_add_filled),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(R.string.video_info_follow),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }
@@ -726,6 +757,7 @@ fun VideoPartButton(
     title: String,
     duration: Int,
     played: Int = 0,
+    itemWidth: Dp = 200.dp,
     onClick: () -> Unit
 ) {
     Surface(
@@ -736,11 +768,14 @@ fun VideoPartButton(
             pressedContainerColor = MaterialTheme.colorScheme.inverseSurface
         ),
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.medium),
+        scale = ClickableSurfaceDefaults.scale(
+            focusedScale = SBVFocus.focusedScale
+        ),
         onClick = { onClick() }
     ) {
         Box(
             modifier = Modifier
-                .size(200.dp, 64.dp)
+                .size(itemWidth, 72.dp)
         ) {
             //播放进度覆盖
             Box(
@@ -969,6 +1004,7 @@ fun VideoUgcSeasonRow(
             title = episode.title,
             played = 0,
             duration = episode.duration,
+            itemWidth = 224.dp,
             onClick = { onClick(episode.aid, episode.cid) }
         )
     }
@@ -1048,9 +1084,9 @@ private fun <T> PagedVideoGridDialog(
                     TvLazyVerticalGrid(
                         state = listState,
                         columns = GridCells.Fixed(2),
-                        contentPadding = PaddingValues(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        contentPadding = PaddingValues(SBVSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(SBVSpacing.md),
+                        horizontalArrangement = Arrangement.spacedBy(SBVSpacing.md)
                     ) {
                         itemsIndexed(
                             items = selectedItems,
@@ -1128,7 +1164,8 @@ private fun UpButtonPreview() {
         UpButton(
             name = "12435678",
             followed = followed,
-            isLoggedIn = true,
+            showFollowButton = true,
+            followingStateLoading = false,
             onClickUp = { followed = !followed },
             onAddFollow = {},
             onDelFollow = {}

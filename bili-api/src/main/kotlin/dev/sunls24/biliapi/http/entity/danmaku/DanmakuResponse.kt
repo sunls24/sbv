@@ -1,14 +1,14 @@
 package dev.sunls24.biliapi.http.entity.danmaku
 
 
-data class DanmakuResponse(
+data class DanmakuResponse<T>(
     val chatserver: String,
     val chatId: Long,
     val maxLimit: Int,
     val state: Int,
     val realName: Int,
     val source: String,
-    val data: List<DanmakuData> = emptyList()
+    val data: List<T> = emptyList()
 )
 
 data class DanmakuData(

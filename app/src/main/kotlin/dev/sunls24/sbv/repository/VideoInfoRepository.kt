@@ -11,6 +11,8 @@ import dev.sunls24.sbv.viewmodel.video.VideoDetailState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.koin.core.annotation.Single
 
 @Single
@@ -22,35 +24,59 @@ class VideoInfoRepository(private val videoDetailRepository: VideoDetailReposito
     val videoDetailState = _videoDetailState.asStateFlow()
 
     suspend fun loadVideoDetail(aid: Long, includeUserActions: Boolean = true) {
-        val videoDetail = videoDetailRepository.getVideoDetail(aid, includeUserActions)
+        val baseDetail = videoDetailRepository.getVideoDetailBase(aid)
+        _videoDetailState.update { baseDetail.toVideoDetailState() }
+        if (baseDetail.redirectToEp) return
 
-        val videoDetailState = VideoDetailState(
-            aid = videoDetail.aid,
-            bvid = videoDetail.bvid,
-            epid = videoDetail.epid,
-            title = videoDetail.title,
-            lastPlayedCid = videoDetail.history.lastPlayedCid,
-            lastPlayedTime = videoDetail.history.progress,
-            isLiked = videoDetail.userActions.like,
-            isCoined = videoDetail.userActions.coin,
-            isFavorite = videoDetail.userActions.favorite,
-            cid = videoDetail.cid,
-            cover = videoDetail.cover,
-            publishDate = videoDetail.publishDate,
-            stat = videoDetail.stat,
-            author = videoDetail.author,
-            tags = videoDetail.tags,
-            isUpowerExclusive = videoDetail.isUpowerExclusive,
-            redirectToEp = videoDetail.redirectToEp,
-            argueTip = videoDetail.argueTip,
-            description = videoDetail.description,
-            pages = videoDetail.pages,
-            relatedVideos = mapToVideoCardData(videoDetail.relatedVideos),
-            ugcSeason = videoDetail.ugcSeason,
-        )
-
-        _videoDetailState.update { videoDetailState }
+        coroutineScope {
+            launch {
+                val history = videoDetailRepository.getVideoHistory(baseDetail)
+                _videoDetailState.update { current ->
+                    current?.takeIf { it.aid == aid }?.copy(
+                        lastPlayedCid = history.lastPlayedCid,
+                        lastPlayedTime = history.progress,
+                        historyResolved = true
+                    ) ?: current
+                }
+            }
+            launch {
+                val actions = videoDetailRepository.getVideoUserActions(aid, includeUserActions)
+                _videoDetailState.update { current ->
+                    current?.takeIf { it.aid == aid }?.copy(
+                        isLiked = actions.like,
+                        isCoined = actions.coin,
+                        isFavorite = actions.favorite
+                    ) ?: current
+                }
+            }
+        }
     }
+
+    private fun dev.sunls24.biliapi.entity.video.VideoDetail.toVideoDetailState() =
+        VideoDetailState(
+            aid = aid,
+            bvid = bvid,
+            epid = epid,
+            title = title,
+            lastPlayedCid = history.lastPlayedCid,
+            lastPlayedTime = history.progress,
+            isLiked = userActions.like,
+            isCoined = userActions.coin,
+            isFavorite = userActions.favorite,
+            cid = cid,
+            cover = cover,
+            publishDate = publishDate,
+            stat = stat,
+            author = author,
+            tags = tags,
+            isUpowerExclusive = isUpowerExclusive,
+            redirectToEp = redirectToEp,
+            argueTip = argueTip,
+            description = description,
+            pages = pages,
+            relatedVideos = mapToVideoCardData(relatedVideos),
+            ugcSeason = ugcSeason,
+        )
 
     suspend fun resolveDirectPlayback(aid: Long): DirectPlaybackData {
         val detail = videoDetailRepository.getVideoDetail(aid, includeUserActions = false)
@@ -63,13 +89,17 @@ class VideoInfoRepository(private val videoDetailRepository: VideoDetailReposito
             VideoListItem(
                 aid = episode.aid,
                 cid = episode.cid,
-                title = episode.title
+                title = episode.title,
+                authorMid = detail.author.mid,
+                authorName = detail.author.name
             )
         } ?: detail.pages.map { page ->
             VideoListItem(
                 aid = detail.aid,
                 cid = page.cid,
-                title = page.title.ifBlank { detail.title }
+                title = page.title.ifBlank { detail.title },
+                authorMid = detail.author.mid,
+                authorName = detail.author.name
             )
         }.ifEmpty {
             listOf(VideoListItem(detail.aid, targetCid, title = detail.title))

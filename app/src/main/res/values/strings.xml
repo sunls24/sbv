@@ -131,6 +131,17 @@
     <string name="title_activity_video_info">视频信息</string>
     <string name="title_activity_video_player_v3">视频播放</string>
     <string name="user_homepage_follow">已关注</string>
+    <string name="up_homepage_archives">投稿</string>
+    <string name="up_homepage_followers">粉丝</string>
+    <string name="up_homepage_following">关注</string>
+    <string name="up_homepage_likes">获赞</string>
+    <string name="up_homepage_loaded_count">已加载 %1$d</string>
+    <string name="up_homepage_no_sign">这个 UP 主还没有填写签名</string>
+    <string name="up_homepage_no_videos">暂无投稿</string>
+    <string name="up_homepage_profile_failed">资料加载失败，投稿仍可正常浏览</string>
+    <string name="up_homepage_profile_loading">正在加载 UP 主资料...</string>
+    <string name="up_homepage_unknown_user">UP 主</string>
+    <string name="up_homepage_videos">投稿视频</string>
 
     <string name="video_aspect_ratio_default">默认</string>
     <string name="video_aspect_ratio_four_to_three">4:3</string>
@@ -176,6 +187,8 @@
     <string name="video_player_control_settings">设置</string>
     <string name="video_player_control_related">相关</string>
     <string name="video_player_control_loop">循环</string>
+    <string name="video_player_seek_backward_by">快退 %1$s</string>
+    <string name="video_player_seek_forward_by">快进 %1$s</string>
     <string name="video_player_press_back_again_to_exit">再次按下返回键退出播放</string>
     <string name="video_player_referer">https://www.bilibili.com</string>
     <string name="video_player_user_agent_http">Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36</string>

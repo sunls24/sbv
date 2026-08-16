@@ -1,11 +1,13 @@
 package dev.sunls24.biliapi.repositories
 
 import dev.sunls24.biliapi.entity.video.VideoDetail
+import dev.sunls24.biliapi.entity.video.UserActions
 import dev.sunls24.biliapi.entity.video.season.SeasonDetail
 import dev.sunls24.biliapi.http.BiliHttpApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Single
 
@@ -13,78 +15,63 @@ import org.koin.core.annotation.Single
 class VideoDetailRepository(
     private val authRepository: AuthRepository,
     private val favoriteRepository: FavoriteRepository,
-    private val likeRepository: LikeRepository,
-    private val coinRepository: CoinRepository
+    private val likeRepository: LikeRepository
 ) {
     suspend fun getVideoDetail(
         aid: Long,
         includeUserActions: Boolean = true
-    ): VideoDetail = withContext(Dispatchers.IO) {
-                    val videoDetailWithoutUserActions = async {
-                        val httpVideoDetail = BiliHttpApi.getVideoDetail(
-                            av = aid,
-                            sessData = authRepository.sessionData ?: ""
-                        ).getResponseData()
-                        VideoDetail.fromVideoDetail(httpVideoDetail)
-                    }
-
-                    val shouldLoadUserActions = includeUserActions && authRepository.isLoggedIn
-
-                    val isFavoured = async {
-                        if (!shouldLoadUserActions) return@async false
-                        runCatching {
-                            favoriteRepository.checkVideoFavoured(aid)
-                        }.getOrDefault(false)
-                    }
-
-                    val isLiked = async {
-                        if (!shouldLoadUserActions) return@async false
-                        runCatching {
-                            likeRepository.checkVideoLiked(
-                                aid = aid,
-                            )
-                        }.getOrDefault(false)
-                    }
-
-                    val isCoined = async {
-                        if (!shouldLoadUserActions) return@async false
-                        runCatching {
-                            coinRepository.checkVideoCoined(
-                                aid = aid,
-                            )
-                        }.getOrDefault(false)
-                    }
-
-
-                    val historyAndPlayerIcon = async {
-                        runCatching {
-                            val videoModeInfo = BiliHttpApi.getVideoMoreInfo(
-                                avid = aid,
-                                cid = videoDetailWithoutUserActions.await().cid,
-                                sessData = authRepository.sessionData ?: "",
-                                buvid3 = authRepository.buvid3 ?: ""
-                            ).getResponseData()
-                            val history = VideoDetail.History(
-                                progress = videoModeInfo.lastPlayTime / 1000,
-                                lastPlayedCid = videoModeInfo.lastPlayCid
-                            )
-                            history
-                        }.getOrDefault(VideoDetail.History(0, 0))
-                    }
-
-                    videoDetailWithoutUserActions.await().let { detail ->
-                        val newUserActions = detail.userActions.copy(
-                            favorite = isFavoured.await(),
-                            like = isLiked.await(),
-                            coin = isCoined.await()
-                        )
-                        val newHistory = historyAndPlayerIcon.await()
-                        detail.copy(
-                            userActions = newUserActions,
-                            history = newHistory
-                        )
-                    }
+    ): VideoDetail = coroutineScope {
+        val detail = getVideoDetailBase(aid)
+        val history = async { getVideoHistory(detail) }
+        val userActions = async { getVideoUserActions(aid, includeUserActions) }
+        detail.copy(
+            history = history.await(),
+            userActions = userActions.await()
+        )
     }
+
+    suspend fun getVideoDetailBase(aid: Long): VideoDetail = withContext(Dispatchers.IO) {
+        BiliHttpApi.getVideoDetail(
+            av = aid,
+            sessData = authRepository.sessionData.orEmpty()
+        ).getResponseData().let(VideoDetail::fromVideoDetail)
+    }
+
+    suspend fun getVideoUserActions(
+        aid: Long,
+        includeUserActions: Boolean = true
+    ): UserActions = withContext(Dispatchers.IO) {
+        if (!includeUserActions || !authRepository.isLoggedIn) return@withContext UserActions()
+        coroutineScope {
+            val isFavoured = async {
+                runCatching { favoriteRepository.checkVideoFavoured(aid) }.getOrDefault(false)
+            }
+            val isLiked = async {
+                runCatching { likeRepository.checkVideoLiked(aid) }.getOrDefault(false)
+            }
+            UserActions(
+                favorite = isFavoured.await(),
+                like = isLiked.await()
+            )
+        }
+    }
+
+    suspend fun getVideoHistory(detail: VideoDetail): VideoDetail.History =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                BiliHttpApi.getVideoMoreInfo(
+                    avid = detail.aid,
+                    cid = detail.cid,
+                    sessData = authRepository.sessionData.orEmpty(),
+                    buvid3 = authRepository.buvid3.orEmpty()
+                ).getResponseData().let {
+                    VideoDetail.History(
+                        progress = it.lastPlayTime / 1000,
+                        lastPlayedCid = it.lastPlayCid
+                    )
+                }
+            }.getOrDefault(VideoDetail.History(0, 0))
+        }
 
     suspend fun getPgcVideoDetail(
         epid: Int? = null,

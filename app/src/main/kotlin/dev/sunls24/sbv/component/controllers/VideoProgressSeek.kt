@@ -52,13 +52,15 @@ fun VideoProgressSeek(
                 cap = StrokeCap.Round
             )
         }
-        drawLine(
-            color = colors.activeTrackColor,
-            start = Offset(trackWidthPx / 2, center.y),
-            end = Offset(size.width * (position / duration.toFloat()), center.y),
-            strokeWidth = trackWidthPx,
-            cap = StrokeCap.Round
-        )
+        if (duration > 0L) {
+            drawLine(
+                color = colors.activeTrackColor,
+                start = Offset(trackWidthPx / 2, center.y),
+                end = Offset(size.width * (position / duration.toFloat()), center.y),
+                strokeWidth = trackWidthPx,
+                cap = StrokeCap.Round
+            )
+        }
     }
 
 }

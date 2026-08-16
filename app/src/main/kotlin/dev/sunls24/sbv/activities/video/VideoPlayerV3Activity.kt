@@ -74,32 +74,22 @@ class VideoPlayerV3Activity : ComponentActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        val directAid = intent.getLongExtra("direct_aid", 0L)
         setContent {
             SBVTheme {
-                VideoPlayerV3Screen()
+                VideoPlayerV3Screen(
+                    onRetryInitialization = {
+                        retryDirectPlayback(directAid)
+                    }
+                )
             }
         }
 
-        val directAid = intent.getLongExtra("direct_aid", 0L)
         if (directAid != 0L) {
             if (playerViewModel.isInitialized) {
                 startPlayer()
             } else {
-                lifecycleScope.launch {
-                    when (val result = playerViewModel.initDirectPlayback(directAid)) {
-                        DirectPlaybackInitResult.Ready -> startPlayer()
-                        is DirectPlaybackInitResult.RedirectToSeason -> {
-                            SeasonInfoActivity.actionStart(
-                                context = this@VideoPlayerV3Activity,
-                                epId = result.epid
-                            )
-                            finish()
-                        }
-                        is DirectPlaybackInitResult.Failure -> {
-                            playerViewModel.showInitializationError(result.message)
-                        }
-                    }
-                }
+                initializeDirectPlayback(directAid)
             }
         } else if (initViewModelFromIntent()) {
             startPlayer()
@@ -170,6 +160,29 @@ class VideoPlayerV3Activity : ComponentActivity() {
             )
         } else {
             return false
+        }
+    }
+
+    private fun retryDirectPlayback(directAid: Long) {
+        if (directAid == 0L || !playerViewModel.beginInitializationRetry()) return
+        initializeDirectPlayback(directAid)
+    }
+
+    private fun initializeDirectPlayback(directAid: Long) {
+        lifecycleScope.launch {
+            when (val result = playerViewModel.initDirectPlayback(directAid)) {
+                DirectPlaybackInitResult.Ready -> startPlayer()
+                is DirectPlaybackInitResult.RedirectToSeason -> {
+                    SeasonInfoActivity.actionStart(
+                        context = this@VideoPlayerV3Activity,
+                        epId = result.epid
+                    )
+                    finish()
+                }
+                is DirectPlaybackInitResult.Failure -> {
+                    playerViewModel.showInitializationError(result.message)
+                }
+            }
         }
     }
 

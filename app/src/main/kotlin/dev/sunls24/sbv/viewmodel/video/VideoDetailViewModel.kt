@@ -2,7 +2,6 @@ package dev.sunls24.sbv.viewmodel.video
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import dev.sunls24.biliapi.repositories.CoinRepository
 import dev.sunls24.biliapi.repositories.AuthRepository
 import dev.sunls24.biliapi.repositories.FavoriteRepository
 import dev.sunls24.biliapi.repositories.LikeRepository
@@ -12,6 +11,7 @@ import dev.sunls24.sbv.entity.VideoListItem
 import dev.sunls24.sbv.repository.VideoInfoRepository
 import dev.sunls24.sbv.ui.effect.VideoDetailUiEffect
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,10 +19,14 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.core.annotation.KoinViewModel
+import java.util.concurrent.ConcurrentHashMap
 
 @KoinViewModel
 class VideoDetailViewModel(
@@ -31,7 +35,6 @@ class VideoDetailViewModel(
     private val userRepository: UserRepository,
     private val favoriteRepository: FavoriteRepository,
     private val likeRepository: LikeRepository,
-    private val coinRepository: CoinRepository,
     private val oneClickTripleActionRepository: OneClickTripleActionRepository
 ) : ViewModel() {
 
@@ -41,17 +44,48 @@ class VideoDetailViewModel(
     private val _uiEffect = MutableSharedFlow<VideoDetailUiEffect>()
     val uiEvent = _uiEffect.asSharedFlow()
     private var detailStateJob: Job? = null
+    private var followingStateJob: Job? = null
+    private var followUpdating = false
     private var initParams: InitParams? = null
+    private var accountDataLoadedAid: Long? = null
+    private val locallyModifiedActions = ConcurrentHashMap.newKeySet<VideoAction>()
+
+    init {
+        userRepository.followingChanges
+            .onEach { change ->
+                val detail = _uiState.value.videoDetailState
+                if (
+                    detail == null ||
+                    detail.aid != initParams?.aid ||
+                    detail.author.mid != change.mid
+                ) return@onEach
+                followingStateJob?.cancel()
+                _uiState.update {
+                    it.copy(
+                        isFollowingUp = change.following,
+                        followingStateLoading = false
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+    }
 
     fun init(aid: Long) {
         if (initParams?.aid == aid && detailStateJob?.isActive == true) return
 
         initParams = InitParams(aid)
+        accountDataLoadedAid = null
+        locallyModifiedActions.clear()
         detailStateJob?.cancel()
+        followingStateJob?.cancel()
+        followUpdating = false
 
         _uiState.update {
             it.copy(
-                isLoggedIn = authRepository.isLoggedIn
+                isLoggedIn = authRepository.isLoggedIn,
+                isFollowingUp = null,
+                followingStateLoading = false,
+                isSelfAuthor = false
             )
         }
 
@@ -73,15 +107,29 @@ class VideoDetailViewModel(
                     return@onEach
                 }
 
-                _uiState.update {
-                    it.copy(
-                        videoDetailState = newState,
+                _uiState.update { currentState ->
+                    val currentDetail = currentState.videoDetailState
+                    val mergedState = newState.copy(
+                        isLiked = currentDetail?.isLiked
+                            ?.takeIf { VideoAction.Like in locallyModifiedActions }
+                            ?: newState.isLiked,
+                        isCoined = currentDetail?.isCoined
+                            ?.takeIf { VideoAction.Coin in locallyModifiedActions }
+                            ?: newState.isCoined,
+                        isFavorite = currentDetail?.isFavorite
+                            ?.takeIf { VideoAction.Favorite in locallyModifiedActions }
+                            ?: newState.isFavorite
+                    )
+                    currentState.copy(
+                        videoDetailState = mergedState,
+                        isSelfAuthor = authRepository.mid == newState.author.mid,
                         loadingState = VideoInfoState.Success
                     )
                 }
 
-                if (authRepository.isLoggedIn) {
-                    updateFollowingState()
+                if (authRepository.isLoggedIn && accountDataLoadedAid != aid) {
+                    accountDataLoadedAid = aid
+                    if (authRepository.mid != newState.author.mid) updateFollowingState()
                     fetchFavoriteData(aid)
                 }
             }.launchIn(viewModelScope)
@@ -111,22 +159,71 @@ class VideoDetailViewModel(
     }
 
     fun setFollow(follow: Boolean) {
-        val userMid = _uiState.value.videoDetailState?.author?.mid ?: return
+        val currentState = _uiState.value
+        val detail = currentState.videoDetailState ?: return
+        if (
+            !currentState.isLoggedIn ||
+            currentState.followingStateLoading ||
+            followUpdating
+        ) return
+        val aid = detail.aid
+        val userMid = detail.author.mid
 
-        viewModelScope.launch(Dispatchers.IO) {
+        followUpdating = true
+        viewModelScope.launch {
+            try {
+                val queriedFollowing = currentState.isFollowingUp ?: withContext(Dispatchers.IO) {
+                    userRepository.checkIsFollowing(mid = userMid)
+                }
+                if (!isCurrentAuthor(aid, userMid)) return@launch
+                val currentFollowing = _uiState.value.isFollowingUp ?: queriedFollowing
+                if (currentFollowing == null) {
+                    _uiEffect.emit(VideoDetailUiEffect.ShowToast("获取关注状态失败"))
+                    return@launch
+                }
+                _uiState.update {
+                    if (it.isFollowingUp == currentFollowing) {
+                        it
+                    } else {
+                        it.copy(isFollowingUp = currentFollowing)
+                    }
+                }
+                if (currentFollowing == follow) return@launch
 
-            if (follow) {
-                userRepository.followUser(
-                    mid = userMid,
-                )
-            } else {
-                userRepository.unfollowUser(
-                    mid = userMid,
-                )
+                val success = withContext(Dispatchers.IO) {
+                    if (follow) {
+                        userRepository.followUser(mid = userMid)
+                    } else {
+                        userRepository.unfollowUser(mid = userMid)
+                    }
+                }
+                if (!isCurrentAuthor(aid, userMid)) return@launch
+                if (success) {
+                    _uiState.update {
+                        if (it.isFollowingUp == follow) it else it.copy(isFollowingUp = follow)
+                    }
+                } else {
+                    _uiEffect.emit(
+                        VideoDetailUiEffect.ShowToast(
+                            if (follow) "关注失败" else "取消关注失败"
+                        )
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                if (isCurrentAuthor(aid, userMid)) {
+                    _uiEffect.emit(
+                        VideoDetailUiEffect.ShowToast(
+                            if (follow) "关注失败" else "取消关注失败"
+                        )
+                    )
+                }
+            } finally {
+                if (isCurrentAuthor(aid, userMid)) {
+                    followUpdating = false
+                }
             }
-
-
-            updateFollowingState()
         }
     }
 
@@ -146,9 +243,13 @@ class VideoDetailViewModel(
             }.onFailure {
                 _uiEffect.emit(VideoDetailUiEffect.ShowToast(it.message ?: "unknown error"))
             }.onSuccess {
-                _uiState.update {
-                    it.copy(
-                        videoDetailState = videoDetail.copy(isFavorite = folderIds.isNotEmpty()),
+                if (_uiState.value.videoDetailState?.aid != videoDetail.aid) return@onSuccess
+                locallyModifiedActions.add(VideoAction.Favorite)
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        videoDetailState = currentState.videoDetailState?.copy(
+                            isFavorite = folderIds.isNotEmpty()
+                        ),
                         videoFavoriteFolderIds = folderIds.toSet()
                     )
                 }
@@ -170,6 +271,10 @@ class VideoDetailViewModel(
             }
         }
     }
+
+    suspend fun awaitHistory(aid: Long): VideoDetailState = uiState
+        .mapNotNull { it.videoDetailState }
+        .first { it.aid == aid && it.historyResolved }
 
     fun addVideoToDefaultFavoriteFolder() {
         val videoFavoriteFolderIds = _uiState.value.videoFavoriteFolderIds
@@ -193,32 +298,15 @@ class VideoDetailViewModel(
                     bvid = currentDetail.bvid
                 )
             }.onSuccess {
+                if (_uiState.value.videoDetailState?.aid != currentDetail.aid) return@onSuccess
+                locallyModifiedActions.add(VideoAction.Like)
                 _uiState.update { currentState ->
-                    currentState.copy(videoDetailState = currentDetail.copy(isLiked = like))
+                    currentState.copy(
+                        videoDetailState = currentState.videoDetailState?.copy(isLiked = like)
+                    )
                 }
             }.onFailure { throwable ->
                 _uiEffect.emit(VideoDetailUiEffect.ShowToast("点赞失败:${throwable.message ?: "unknown error"}"))
-            }
-        }
-    }
-
-    fun sendVideoCoin() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val currentDetail = _uiState.value.videoDetailState ?: run {
-                return@launch
-            }
-
-            runCatching {
-                coinRepository.sendVideoCoin(
-                    aid = currentDetail.aid,
-                    bvid = currentDetail.bvid
-                )
-            }.onSuccess {
-                _uiState.update { currentState ->
-                    currentState.copy(videoDetailState = currentDetail.copy(isCoined = true))
-                }
-            }.onFailure { throwable ->
-                _uiEffect.emit(VideoDetailUiEffect.ShowToast("投币失败:${throwable.message ?: "unknown error"}"))
             }
         }
     }
@@ -236,11 +324,13 @@ class VideoDetailViewModel(
                 )
             }.onSuccess { data ->
                 if (data != null) {
+                    if (_uiState.value.videoDetailState?.aid != currentDetail.aid) return@onSuccess
+                    locallyModifiedActions.addAll(VideoAction.entries)
                     _uiState.update { currentState ->
                         val defaultFolderId = getDefaultFavoriteFolderId()
 
                         currentState.copy(
-                            videoDetailState = currentDetail.copy(
+                            videoDetailState = currentState.videoDetailState?.copy(
                                 isLiked = data.like,
                                 isCoined = data.coin,
                                 isFavorite = data.fav
@@ -282,17 +372,45 @@ class VideoDetailViewModel(
     }
 
     private fun updateFollowingState() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val userMid = _uiState.value.videoDetailState?.author?.mid ?: -1
-            val isFollowing = userRepository.checkIsFollowing(
-                mid = userMid,
-            )
-            _uiState.update { it.copy(isFollowingUp = isFollowing ?: false) }
+        val currentState = _uiState.value
+        if (!currentState.isLoggedIn || currentState.isSelfAuthor) return
+        val detail = currentState.videoDetailState ?: return
+        val aid = detail.aid
+        val userMid = detail.author.mid
+        followingStateJob?.cancel()
+        _uiState.update {
+            it.copy(followingStateLoading = true)
         }
+        followingStateJob = viewModelScope.launch {
+            val isFollowing = withContext(Dispatchers.IO) {
+                userRepository.checkIsFollowing(mid = userMid)
+            }
+            if (!isCurrentAuthor(aid, userMid)) return@launch
+            _uiState.update {
+                it.copy(
+                    isFollowingUp = isFollowing,
+                    followingStateLoading = false
+                )
+            }
+            if (isFollowing == null) {
+                _uiEffect.emit(VideoDetailUiEffect.ShowToast("获取关注状态失败"))
+            }
+        }
+    }
+
+    private fun isCurrentAuthor(aid: Long, userMid: Long): Boolean {
+        val detail = _uiState.value.videoDetailState
+        return detail?.aid == aid && detail.author.mid == userMid
     }
 
     override fun onCleared() {
         videoInfoRepository.reset()
+    }
+
+    private enum class VideoAction {
+        Like,
+        Coin,
+        Favorite
     }
 }
 

@@ -77,16 +77,21 @@ fun MenuListItem(
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
-                        Text(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(32.dp),
-                            text = text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = textAlign,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                modifier = Modifier.fillMaxWidth(),
+                                text = text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = textAlign,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 Row(

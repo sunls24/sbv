@@ -19,11 +19,10 @@ import dev.sunls24.biliapi.http.entity.user.FollowActionSource
 import dev.sunls24.biliapi.http.entity.user.MyInfoData
 import dev.sunls24.biliapi.http.entity.user.RelationData
 import dev.sunls24.biliapi.http.entity.user.UserFollowData
+import dev.sunls24.biliapi.http.entity.user.WebUserCardData
 import dev.sunls24.biliapi.http.entity.user.WebSpaceVideoData
 import dev.sunls24.biliapi.http.entity.user.favorite.FavoriteFolderInfoListData
 import dev.sunls24.biliapi.http.entity.user.favorite.UserFavoriteFoldersData
-import dev.sunls24.biliapi.http.entity.video.AddCoin
-import dev.sunls24.biliapi.http.entity.video.CheckSentCoin
 import dev.sunls24.biliapi.http.entity.video.CheckVideoFavoured
 import dev.sunls24.biliapi.http.entity.video.OneClickTripleAction
 import dev.sunls24.biliapi.http.entity.video.PlayUrlData
@@ -44,6 +43,7 @@ import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -65,7 +65,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
-import javax.xml.parsers.DocumentBuilderFactory
+import java.io.InputStream
+import javax.xml.parsers.SAXParserFactory
+import org.xml.sax.Attributes
+import org.xml.sax.helpers.DefaultHandler
 
 @Suppress("SpellCheckingInspection")
 object BiliHttpApi {
@@ -78,9 +81,13 @@ object BiliHttpApi {
         prettyPrint = true
     }
 
-    var wbiImgKey: String? = null
-    var wbiSubKey: String? = null
-    private var wbiLastRefreshDate = 0L
+    internal data class WbiKeys(
+        val imgKey: String,
+        val subKey: String,
+        val refreshedAt: Long
+    )
+
+    private val wbiKeys = mutableMapOf<String, WbiKeys>()
     private val wbiMutex = Mutex()
 
     // 用于获取 buvid3 的提供者，由应用层设置
@@ -138,11 +145,13 @@ object BiliHttpApi {
         av: Long? = null,
         bv: String? = null,
         sessData: String? = null
-    ): BiliResponse<VideoDetail> = client.get("/x/web-interface/wbi/view/detail") {
+    ): BiliResponse<VideoDetail> = getWbiResponse(
+        path = "/x/web-interface/wbi/view/detail",
+        cookieHeader = sessData?.let { "SESSDATA=$it;" }
+    ) {
         parameter("aid", av)
         parameter("bvid", bv)
-        sessData?.let { header("Cookie", "SESSDATA=$sessData;") }
-    }.body()
+    }
 
     /**
      * 获取视频流
@@ -202,7 +211,15 @@ object BiliHttpApi {
         fromClient: String? = null,
         sessData: String? = null,
         buvid3: String? = null
-    ): BiliResponse<PlayUrlV2Data> = client.get("/pgc/player/web/v2/playurl") {
+    ): BiliResponse<PlayUrlV2Data> {
+        val cookieHeader = buildList {
+            sessData?.let { add("SESSDATA=$it") }
+            buvid3?.let { add("buvid3=$it") }
+        }.joinToString(";").takeIf(String::isNotEmpty)
+        return getWbiResponse(
+            path = "/pgc/player/web/v2/playurl",
+            cookieHeader = cookieHeader
+        ) {
         av?.let { parameter("avid", it) }
         bv?.let { parameter("bvid", it) }
         epid?.let { parameter("ep_id", it) }
@@ -215,56 +232,42 @@ object BiliHttpApi {
         supportMultiAudio?.let { parameter("support_multi_audio", it) }
         drmTechType?.let { parameter("drm_tech_type", it) }
         fromClient?.let { parameter("from_client", it) }
-        val cookieParts = mutableListOf<String>()
-        sessData?.let { cookieParts.add("SESSDATA=$it") }
-        buvid3?.let { cookieParts.add("buvid3=$it") }
-        if (cookieParts.isNotEmpty()) {
-            val cookieString = cookieParts.joinToString(";")
-            header("Cookie", cookieString)
-        }
         //必须得加上 referer 才能通过账号身份验证
         header("referer", "https://www.bilibili.com")
-    }.body()
+        }
+    }
 
     /**
      * 通过[cid]获取视频弹幕
      */
-    suspend fun getDanmakuXml(
+    suspend fun <T> getDanmakuXml(
         cid: Long,
-        sessData: String = ""
-    ): DanmakuResponse {
+        sessData: String = "",
+        transform: (DanmakuData) -> T
+    ): DanmakuResponse<T> {
         val xmlChannel = client.get("/x/v1/dm/list.so") {
             parameter("oid", cid)
             header("Cookie", "SESSDATA=$sessData;")
         }.bodyAsChannel()
 
-        val dbFactory = DocumentBuilderFactory.newInstance()
-        val dBuilder = dbFactory.newDocumentBuilder()
-        val doc = withContext(Dispatchers.IO) {
-            dBuilder.parse(xmlChannel.toInputStream())
+        return withContext(Dispatchers.IO) {
+            parseDanmakuXml(xmlChannel.toInputStream(), transform)
         }
-        doc.documentElement.normalize()
+    }
 
-        val chatServer = doc.getElementsByTagName("chatserver").item(0).textContent
-        val chatId = doc.getElementsByTagName("chatid").item(0).textContent.toLong()
-        val maxLimit = doc.getElementsByTagName("maxlimit").item(0).textContent.toInt()
-        val state = doc.getElementsByTagName("state").item(0).textContent.toInt()
-        val realName = doc.getElementsByTagName("real_name").item(0).textContent.toInt()
-        val source = runCatching {
-            doc.getElementsByTagName("source").item(0).textContent
-        }.getOrDefault("")
-
-        val data = mutableListOf<DanmakuData>()
-        val danmakuNodes = doc.getElementsByTagName("d")
-
-        for (i in 0 until danmakuNodes.length) {
-            val danmakuNode = danmakuNodes.item(i)
-            val p = danmakuNode.attributes.item(0).textContent
-            val text = danmakuNode.textContent
-            data.add(DanmakuData.fromString(p, text))
+    internal fun <T> parseDanmakuXml(
+        input: InputStream,
+        transform: (DanmakuData) -> T
+    ): DanmakuResponse<T> {
+        val handler = DanmakuXmlHandler(transform)
+        val factory = SAXParserFactory.newInstance().apply {
+            isNamespaceAware = false
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
         }
-
-        return DanmakuResponse(chatServer, chatId, maxLimit, state, realName, source, data)
+        factory.newSAXParser().parse(input, handler)
+        return handler.toResponse()
     }
 
     /**
@@ -294,6 +297,20 @@ object BiliHttpApi {
         sessData: String = ""
     ): BiliResponse<MyInfoData> = client.get("/x/space/myinfo") {
         header("Cookie", "SESSDATA=$sessData;")
+    }.body()
+
+    /**
+     * 获取用户公开资料和统计信息。
+     */
+    suspend fun getWebUserCard(
+        mid: Long,
+        sessData: String? = null
+    ): BiliResponse<WebUserCardData> = client.get("/x/web-interface/card") {
+        parameter("mid", mid)
+        sessData?.takeIf(String::isNotBlank)?.let {
+            header(HttpHeaders.Cookie, "SESSDATA=$it;")
+        }
+        header("referer", "https://space.bilibili.com/$mid")
     }.body()
 
     /**
@@ -472,11 +489,13 @@ object BiliHttpApi {
         cid: Long,
         sessData: String,
         buvid3: String
-    ): BiliResponse<VideoMoreInfo> = client.get("/x/player/wbi/v2") {
+    ): BiliResponse<VideoMoreInfo> = getWbiResponse(
+        path = "/x/player/wbi/v2",
+        cookieHeader = "buvid3=$buvid3; SESSDATA=$sessData;"
+    ) {
         parameter("aid", avid)
         parameter("cid", cid)
-        header("Cookie", "buvid3=$buvid3; SESSDATA=$sessData;")
-    }.body()
+    }
 
     /**
      * 为视频[avid]或[bvid]点赞或取消赞
@@ -524,58 +543,6 @@ object BiliHttpApi {
         }.body<BiliResponse<Int>>()
         return runCatching {
             response.getResponseData() == 1
-        }.getOrDefault(false)
-    }
-
-    /**
-     * 为视频[avid]或[bvid]点赞或取消赞
-     *
-     * @param like 是否顺便点赞
-     * @param multiply 投币数量
-     * @param csrf bili_jct
-     * @param sessData SESSDATA
-     */
-    suspend fun sendVideoCoin(
-        avid: Long? = null,
-        bvid: String? = null,
-        multiply: Int = 1,
-        like: Boolean = false,
-        csrf: String,
-        sessData: String,
-        buvid3: String
-    ): Pair<Boolean, String> {
-        require(avid != null || bvid != null) { "avid and bvid cannot be null at the same time" }
-        val response = client.post("/x/web-interface/coin/add") {
-            setBody(FormDataContent(
-                Parameters.build {
-                    avid?.let { append("aid", "$it") }
-                    bvid?.let { append("bvid", it) }
-                    append("multiply", "$multiply")
-                    append("select_like", "${if (like) 1 else 0}")
-                    append("csrf", csrf)
-                }
-            ))
-            header("Cookie", "SESSDATA=$sessData;buvid3=$buvid3")
-        }.body<BiliResponse<AddCoin>>()
-        return Pair(response.code == 0, response.message)
-    }
-
-    /**
-     * 检查视频[avid]或[bvid]是否已投币
-     */
-    suspend fun checkVideoSentCoin(
-        avid: Long? = null,
-        bvid: String? = null,
-        sessData: String
-    ): Boolean {
-        val response = client.get("/x/web-interface/archive/coins") {
-            require(avid != null || bvid != null) { "avid and bvid cannot be null at the same time" }
-            avid?.let { parameter("aid", it) }
-            bvid?.let { parameter("bvid", it) }
-            header("Cookie", "SESSDATA=$sessData;")
-        }.body<BiliResponse<CheckSentCoin>>()
-        return runCatching {
-            response.getResponseData().multiply != 0
         }.getOrDefault(false)
     }
 
@@ -669,7 +636,10 @@ object BiliHttpApi {
         pageSize: Int = 30,
         sessData: String,
         dedeUserID: Long? = null
-    ): BiliResponse<WebSpaceVideoData> = client.get("/x/space/wbi/arc/search") {
+    ): BiliResponse<WebSpaceVideoData> = getWbiResponse(
+        path = "/x/space/wbi/arc/search",
+        cookieHeader = "SESSDATA=$sessData;DedeUserID=$dedeUserID;"
+    ) {
         parameter("mid", mid)
         parameter("order", order)
         parameter("tid", tid)
@@ -681,9 +651,8 @@ object BiliHttpApi {
         parameter("dm_img_str", "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ")
         parameter("dm_cover_img_str", "QU5HTEUgKEFNRCwgQU1EIFJhZGVvbiA3ODBNIEdyYXBoaWNzICgweDAwMDAxNUJGKSBEaXJlY3QzRDExIHZzXzVfMCBwc181XzAsIEQzRDExKUdvb2dsZSBJbmMuIChBTU")
         parameter("dm_img_inter", "{\"ds\":[],\"wh\":[4769,2793,43],\"of\":[285,570,285]}")
-        header("Cookie", "SESSDATA=$sessData;DedeUserID=$dedeUserID;")
         header("referer", "https://space.bilibili.com")
-    }.body()
+    }
 
     suspend fun getWebSeasonInfo(
         seasonId: Int? = null,
@@ -790,10 +759,12 @@ object BiliHttpApi {
     suspend fun getRelations(
         mid: Long,
         sessData: String
-    ): BiliResponse<RelationData> = client.get("/x/space/wbi/acc/relation") {
+    ): BiliResponse<RelationData> = getWbiResponse(
+        path = "/x/space/wbi/acc/relation",
+        cookieHeader = "SESSDATA=$sessData;"
+    ) {
         parameter("mid", mid)
-        header("Cookie", "SESSDATA=$sessData;")
-    }.body()
+    }
 
     /**
      * 获取用户[mid]的关系统计（关注数，粉丝数，黑名单数）
@@ -808,10 +779,10 @@ object BiliHttpApi {
         limit: Int = 10,
         platform: String? = null
     ): BiliResponse<WebSearchSquareData> =
-        client.get("/x/web-interface/wbi/search/square") {
+        getWbiResponse("/x/web-interface/wbi/search/square") {
             parameter("limit", limit)
             platform?.let { parameter("platform", platform) }
-        }.body()
+        }
 
     /**
      * 获取搜索提示（App）
@@ -852,17 +823,21 @@ object BiliHttpApi {
         page: Int = 1,
         buvid3: String? = null,
         sessData: String? = null,
-    ): BiliResponse<SearchResultData> = client.get("/x/web-interface/wbi/search/type") {
-        parameter("keyword", keyword)
-        parameter("search_type", type)
-        parameter("page", page)
+    ): BiliResponse<SearchResultData> {
         val cookieHeader = buildList {
             buvid3?.takeIf(String::isNotBlank)?.let { add("buvid3=$it;") }
             sessData?.takeIf(String::isNotBlank)?.let { add("SESSDATA=$it;") }
-        }.joinToString(" ")
-        if (cookieHeader.isNotEmpty()) header(HttpHeaders.Cookie, cookieHeader)
+        }.joinToString(" ").takeIf(String::isNotEmpty)
+        return getWbiResponse(
+            path = "/x/web-interface/wbi/search/type",
+            cookieHeader = cookieHeader
+        ) {
+        parameter("keyword", keyword)
+        parameter("search_type", type)
+        parameter("page", page)
         header("referer", "https://search.bilibili.com/")
-    }.body()
+        }
+    }
 
     /**
      * 获取用户[mid]的追剧列表
@@ -899,11 +874,20 @@ object BiliHttpApi {
             cookieHeader?.let { header(HttpHeaders.Cookie, it) }
         }.body()
 
+    internal suspend fun getWbiKeys(cookieHeader: String?): WbiKeys {
+        val identity = wbiIdentity(cookieHeader)
+        updateWbi(cookieHeader = cookieHeader)
+        return wbiMutex.withLock {
+            requireNotNull(wbiKeys[identity]) { "WBI keys are unavailable" }
+        }
+    }
+
     suspend fun updateWbi(force: Boolean = false, cookieHeader: String? = null) {
+        val identity = wbiIdentity(cookieHeader)
         wbiMutex.withLock {
             val now = System.currentTimeMillis()
-            val needsUpdate = force || wbiImgKey == null || wbiSubKey == null ||
-                    now - wbiLastRefreshDate > 2 * 60 * 60 * 1000L
+            val cached = wbiKeys[identity]
+            val needsUpdate = force || cached == null || now - cached.refreshedAt > WBI_CACHE_TTL
             if (!needsUpdate) return
 
             try {
@@ -911,19 +895,52 @@ object BiliHttpApi {
                 val wbiData = requireNotNull(navResponse.data ?: navResponse.result) {
                     "WBI nav response data is null: ${navResponse.message}"
                 }.wbiImg
-                wbiImgKey = wbiData.getImgKey()
-                wbiSubKey = wbiData.getSubKey()
-                wbiLastRefreshDate = now
+                wbiKeys[identity] = WbiKeys(
+                    imgKey = wbiData.getImgKey(),
+                    subKey = wbiData.getSubKey(),
+                    refreshedAt = now
+                )
+                if (identity != ANONYMOUS_WBI_IDENTITY) {
+                    wbiKeys.keys.removeAll { it != ANONYMOUS_WBI_IDENTITY && it != identity }
+                }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
             }
         }
     }
 
-    private fun invalidateWbi() {
-        wbiImgKey = null
-        wbiSubKey = null
-        wbiLastRefreshDate = 0L
+    private suspend fun invalidateWbi(cookieHeader: String?) {
+        wbiMutex.withLock {
+            wbiKeys.remove(wbiIdentity(cookieHeader))
+        }
+    }
+
+    private fun wbiIdentity(cookieHeader: String?): String =
+        cookieHeader
+            ?.split(';')
+            ?.firstOrNull { it.trim().startsWith("SESSDATA=") }
+            ?.substringAfter('=')
+            ?.takeIf(String::isNotBlank)
+            ?: ANONYMOUS_WBI_IDENTITY
+
+    private suspend inline fun <reified T> getWbiResponse(
+        path: String,
+        cookieHeader: String? = null,
+        crossinline block: HttpRequestBuilder.() -> Unit
+    ): BiliResponse<T> {
+        val request: suspend () -> BiliResponse<T> = {
+            client.get(path) {
+                cookieHeader?.let { header(HttpHeaders.Cookie, it) }
+                block()
+            }.body()
+        }
+
+        val response = request.invoke()
+        if (response.code != -403) return response
+
+        invalidateWbi(cookieHeader)
+        updateWbi(force = true, cookieHeader = cookieHeader)
+        return request.invoke()
     }
 
     /**
@@ -937,29 +954,75 @@ object BiliHttpApi {
         lastShowlist: String? = null,
         sessData: String? = null
     ): BiliResponse<RcmdTopData> {
-        suspend fun request(): BiliResponse<RcmdTopData> =
-            client.get("/x/web-interface/wbi/index/top/feed/rcmd") {
-                parameter("fresh_type", freshType)
-                parameter("feed_version", "V8")
-                parameter("homepage_ver", 1)
-                parameter("ps", pageSize)
-                parameter("fresh_idx", idx)
-                parameter("fresh_idx_1h", idx)
-                parameter("fetch_row", fetchRow)
-                lastShowlist?.let { parameter("last_showlist", it) }
-                sessData?.let { header("Cookie", "SESSDATA=$it;") }
-            }.body()
-
-        val response = request()
-        if (response.code != -403) return response
-        invalidateWbi()
-        updateWbi(
-            force = true,
-            cookieHeader = sessData?.let { "SESSDATA=$it;" }
-        )
-        return request()
+        val cookieHeader = sessData?.let { "SESSDATA=$it;" }
+        return getWbiResponse(
+            path = "/x/web-interface/wbi/index/top/feed/rcmd",
+            cookieHeader = cookieHeader
+        ) {
+            parameter("fresh_type", freshType)
+            parameter("feed_version", "V8")
+            parameter("homepage_ver", 1)
+            parameter("ps", pageSize)
+            parameter("fresh_idx", idx)
+            parameter("fresh_idx_1h", idx)
+            parameter("fetch_row", fetchRow)
+            lastShowlist?.let { parameter("last_showlist", it) }
+        }
     }
 
     suspend fun downloadText(url: String): String = client.get(url).bodyAsText()
+
+    private const val WBI_CACHE_TTL = 2 * 60 * 60 * 1000L
+    private const val ANONYMOUS_WBI_IDENTITY = "anonymous"
+
+    private class DanmakuXmlHandler<T>(
+        private val transform: (DanmakuData) -> T
+    ) : DefaultHandler() {
+        private var danmakuParameters: String? = null
+        private val text = StringBuilder()
+        private var chatServer = ""
+        private var chatId = 0L
+        private var maxLimit = 0
+        private var state = 0
+        private var realName = 0
+        private var source = ""
+        private val data = mutableListOf<T>()
+
+        override fun startElement(uri: String?, localName: String?, qName: String, attributes: Attributes) {
+            text.setLength(0)
+            if (qName == "d") danmakuParameters = attributes.getValue("p")
+        }
+
+        override fun characters(characters: CharArray, start: Int, length: Int) {
+            text.append(characters, start, length)
+        }
+
+        override fun endElement(uri: String?, localName: String?, qName: String) {
+            val value = text.toString()
+            when (qName) {
+                "chatserver" -> chatServer = value
+                "chatid" -> chatId = value.toLong()
+                "maxlimit" -> maxLimit = value.toInt()
+                "state" -> state = value.toInt()
+                "real_name" -> realName = value.toInt()
+                "source" -> source = value
+                "d" -> danmakuParameters?.let {
+                    data.add(transform(DanmakuData.fromString(it, value)))
+                }
+            }
+            danmakuParameters = null
+            text.setLength(0)
+        }
+
+        fun toResponse() = DanmakuResponse(
+            chatserver = chatServer,
+            chatId = chatId,
+            maxLimit = maxLimit,
+            state = state,
+            realName = realName,
+            source = source,
+            data = data
+        )
+    }
 
 }

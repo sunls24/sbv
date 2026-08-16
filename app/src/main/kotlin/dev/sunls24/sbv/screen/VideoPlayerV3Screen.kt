@@ -37,7 +37,8 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun VideoPlayerV3Screen(
     modifier: Modifier = Modifier,
-    playerViewModel: VideoPlayerV3ViewModel = koinViewModel()
+    playerViewModel: VideoPlayerV3ViewModel = koinViewModel(),
+    onRetryInitialization: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val videoPlayer = playerViewModel.videoPlayer
@@ -87,7 +88,23 @@ fun VideoPlayerV3Screen(
         isPlaying = videoPlayer?.isPlaying ?: false,
         uiState = uiState,
         seekerState = seekerState,
-        onPlay = { videoPlayer?.play() },
+        onPlay = {
+            if (uiState.playerState is PlayerState.Error) {
+                when {
+                    uiState.isRetrying -> Unit
+                    !playerViewModel.isInitialized -> onRetryInitialization()
+                    else -> {
+                        val retryPosition = seekerState.value.currentTime.coerceAtLeast(0L)
+                        playerViewModel.loadVideoWithResources(
+                            startPosition = retryPosition,
+                            randomizeCdn = true,
+                        )
+                    }
+                }
+            } else {
+                videoPlayer?.play()
+            }
+        },
         onPause = {
             videoPlayer?.pause()
             playerViewModel.trySendHeartbeat()
@@ -151,6 +168,8 @@ fun VideoPlayerV3Screen(
                         aid = video.avid,
                         cid = video.cid,
                         title = video.title,
+                        authorMid = video.upMid ?: 0L,
+                        authorName = video.upName,
                     )
                 )
             }

@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 
 data class SBVPlayerOptions(
     val userAgent: String? = null,
@@ -32,6 +33,10 @@ class SBVPlayer(
             options.userAgent?.let(::setUserAgent)
             options.referer?.let { setDefaultRequestProperties(mapOf("referer" to it)) }
         }
+
+    private val loadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy(
+        MIN_LOADABLE_RETRY_COUNT
+    )
 
     init {
         val renderersFactory = DefaultRenderersFactory(context).apply {
@@ -101,6 +106,12 @@ class SBVPlayer(
 
     private fun createMediaSource(url: String): MediaSource =
         ProgressiveMediaSource.Factory(dataSourceFactory)
+            .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
             .createMediaSource(MediaItem.fromUri(url))
+
+    private companion object {
+        // 同一个 CDN 地址先做有限重试，最终失败再由上层重新解析播放地址。
+        const val MIN_LOADABLE_RETRY_COUNT = 2
+    }
 
 }

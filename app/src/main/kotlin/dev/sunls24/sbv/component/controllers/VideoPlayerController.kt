@@ -3,6 +3,7 @@ package dev.sunls24.sbv.component.controllers
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -25,6 +26,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
@@ -86,23 +88,27 @@ fun VideoPlayerController(
 
     content: @Composable () -> Unit
 ) {
-    val clock by produceState(initialValue = currentClock()) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var activePanel by remember { mutableStateOf(PlayerControllerPanel.None) }
+    val showInfoPanel = activePanel == PlayerControllerPanel.InfoSeek
+    val clock by produceState(initialValue = currentClock(), key1 = showInfoPanel) {
+        if (!showInfoPanel) return@produceState
         while (true) {
             value = currentClock()
             delay(1_000)
         }
     }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    var activePanel by remember { mutableStateOf(PlayerControllerPanel.None) }
     var infoSeekFocus by remember { mutableStateOf(InfoSeekFocus.Seek) }
     var resumeAfterRelatedVideos by remember { mutableStateOf(false) }
 
     var lastPressBack by remember { mutableLongStateOf(0L) }
     var goTime by remember { mutableLongStateOf(0L) }
+    var seekStartTime by remember { mutableLongStateOf(0L) }
 
     var isSeeking by remember { mutableStateOf(false) }
+    var seekDirection by remember { mutableStateOf(SeekDirection.Forward) }
     var seekChangeCount by remember { mutableIntStateOf(0) }
     var lastSeekChangeTime by remember { mutableLongStateOf(0L) }
 
@@ -121,6 +127,7 @@ fun VideoPlayerController(
 
     fun onTimeForward() {
         isSeeking = true
+        seekDirection = SeekDirection.Forward
         val targetTime = goTime + (10000 + calCoefficient() * 5000)
         goTime =
             if (targetTime > seekerState.value.totalDuration) seekerState.value.totalDuration else targetTime
@@ -129,6 +136,7 @@ fun VideoPlayerController(
 
     fun onTimeBack() {
         isSeeking = true
+        seekDirection = SeekDirection.Backward
         val targetTime = goTime - (10000 + calCoefficient() * 5000)
         goTime = if (targetTime < 0) 0 else targetTime
         lastSeekChangeTime = System.currentTimeMillis()
@@ -143,24 +151,24 @@ fun VideoPlayerController(
             if (!isPlaying) onPlay()
 
             isSeeking = false
-            if (activePanel == PlayerControllerPanel.InfoSeek) {
-                activePanel = PlayerControllerPanel.None
-            }
-            hideInfoSeekControllerCountdown?.cancel()
         }
     }
 
-    fun onDirectionLeft() {
-        if (!isSeeking) goTime = seekerState.value.currentTime
-        onTimeBack()
+    fun onDirection(direction: SeekDirection) {
+        if (!isSeeking || seekDirection != direction) {
+            seekStartTime = if (isSeeking) goTime else seekerState.value.currentTime
+            if (!isSeeking) goTime = seekStartTime
+        }
+        when (direction) {
+            SeekDirection.Backward -> onTimeBack()
+            SeekDirection.Forward -> onTimeForward()
+        }
         startSeekCountdown()
     }
 
-    fun onDirectionRight() {
-        if (!isSeeking) goTime = seekerState.value.currentTime
-        onTimeForward()
-        startSeekCountdown()
-    }
+    fun onDirectionLeft() = onDirection(SeekDirection.Backward)
+
+    fun onDirectionRight() = onDirection(SeekDirection.Forward)
 
     fun onSeekGoTime() {
         onGoTime(goTime)
@@ -242,6 +250,13 @@ fun VideoPlayerController(
             }
         }
 
+        // 错误页的重试按钮需要接收确认键，不能被播放器根布局提前消费。
+        if (uiState.playerState is PlayerState.Error &&
+            event.key in setOf(Key.DirectionCenter, Key.Enter, Key.Spacebar)
+        ) {
+            return false
+        }
+
         if (activePanel != PlayerControllerPanel.None) {
             return false
         } else {
@@ -275,15 +290,11 @@ fun VideoPlayerController(
 
                 Key.MediaRewind, Key.DirectionLeft -> {
                     if (uiState.showSkipToNextEp) onCancelSkipToNextEp()
-                    infoSeekFocus = InfoSeekFocus.Seek
-                    activePanel = PlayerControllerPanel.InfoSeek
                     onDirectionLeft()
                     return true
                 }
 
                 Key.MediaFastForward, Key.DirectionRight -> {
-                    infoSeekFocus = InfoSeekFocus.Seek
-                    activePanel = PlayerControllerPanel.InfoSeek
                     onDirectionRight()
                     return true
                 }
@@ -336,6 +347,8 @@ fun VideoPlayerController(
             isBuffering = uiState.isBuffering,
             isError = uiState.playerState is PlayerState.Error,
             errorMessage = (uiState.playerState as? PlayerState.Error)?.message,
+            isRetrying = uiState.isRetrying,
+            onRetry = onPlay,
         )
 
         RelatedVideosController(
@@ -350,7 +363,7 @@ fun VideoPlayerController(
 
         ControllerVideoInfo(
             modifier = Modifier.focusable(),
-            show = activePanel == PlayerControllerPanel.InfoSeek,
+            show = showInfoPanel,
             isSeeking = isSeeking,
             isPlaying = isPlaying,
             initialFocus = infoSeekFocus,
@@ -390,6 +403,62 @@ fun VideoPlayerController(
             onToggleLoop = onToggleLoop,
             onGoToUpPage = onGoToUpPage
         )
+
+        if (isSeeking && activePanel == PlayerControllerPanel.None) {
+            ControllerVideoInfoSeekProgress(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = ControllerVideoInfoActionRowHeight),
+                isSeeking = true,
+                goTime = goTime,
+                seekerState = seekerState.value,
+            )
+        }
+
+        val showSeekTip = isSeeking &&
+            (activePanel == PlayerControllerPanel.None || activePanel == PlayerControllerPanel.InfoSeek)
+        val seekDeltaSeconds = when (seekDirection) {
+            SeekDirection.Backward -> (seekStartTime - goTime).coerceAtLeast(0L) / 1000L
+            SeekDirection.Forward -> (goTime - seekStartTime).coerceAtLeast(0L) / 1000L
+        }
+
+        if (showSeekTip && seekDeltaSeconds > 0L) {
+            val direction = seekDirection
+            val text = when (direction) {
+                SeekDirection.Backward -> stringResource(
+                    R.string.video_player_seek_backward_by,
+                    formatSeekDuration(seekDeltaSeconds),
+                )
+
+                SeekDirection.Forward -> stringResource(
+                    R.string.video_player_seek_forward_by,
+                    formatSeekDuration(seekDeltaSeconds),
+                )
+            }
+
+            Text(
+                text = text,
+                modifier = Modifier
+                    .align(
+                        if (direction == SeekDirection.Backward) {
+                            Alignment.BottomStart
+                        } else {
+                            Alignment.BottomEnd
+                        }
+                    )
+                    .padding(
+                        start = 64.dp,
+                        end = 64.dp,
+                        bottom = 120.dp,
+                    )
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                color = Color.White,
+                fontSize = 22.sp,
+            )
+        }
 
         VideoListController(
             show = activePanel == PlayerControllerPanel.VideoList,
@@ -447,6 +516,18 @@ fun VideoPlayerController(
     }
 }
 
+private fun formatSeekDuration(seconds: Long): String {
+    if (seconds < 60) return "${seconds}秒"
+
+    val minutes = seconds / 60
+    val remainingSeconds = seconds % 60
+    return if (remainingSeconds == 0L) {
+        "${minutes}分钟"
+    } else {
+        "${minutes}分${remainingSeconds.toString().padStart(2, '0')}秒"
+    }
+}
+
 private fun currentClock(): Pair<Int, Int> = Calendar.getInstance().let {
     it.get(Calendar.HOUR_OF_DAY) to it.get(Calendar.MINUTE)
 }
@@ -457,4 +538,9 @@ private enum class PlayerControllerPanel {
     Menu,
     InfoSeek,
     RelatedVideos
+}
+
+private enum class SeekDirection {
+    Backward,
+    Forward
 }

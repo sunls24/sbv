@@ -41,6 +41,30 @@ private fun Map<String, String>.toSortedQueryString(): String =
 private fun getMixinKey(orig: String): String =
     mixinKeyEncTab.fold("") { s, i -> s + orig[i] }.substring(0, 32)
 
+private val wbiFilteredCharacters = setOf('!', '\'', '(', ')', '*')
+
+private fun String.encodeWbiComponent(): String =
+    URLEncoder.encode(this, Charsets.UTF_8.name())
+        .replace("+", "%20")
+        .replace("%7E", "~")
+
+internal fun signWbiParameters(
+    parameters: Map<String, String>,
+    imgKey: String,
+    subKey: String,
+    wts: Int
+): String {
+    val mixinKey = getMixinKey(imgKey + subKey)
+    val query = (parameters + ("wts" to wts.toString()))
+        .toSortedMap()
+        .entries
+        .joinToString("&") { (key, value) ->
+            val filteredValue = value.filterNot(wbiFilteredCharacters::contains)
+            "${key.encodeWbiComponent()}=${filteredValue.encodeWbiComponent()}"
+        }
+    return (query + mixinKey).md5()
+}
+
 private val HttpRequestBuilder.isAppRequest: Boolean
     get() = url.parameters.contains("access_key") || url.host == "app.bilibili.com"
 
@@ -71,29 +95,12 @@ fun HttpRequestBuilder.encAppGet() {
 }
 
 suspend fun HttpRequestBuilder.encWbi() {
-    if (BiliHttpApi.wbiImgKey == null || BiliHttpApi.wbiSubKey == null) {
-        BiliHttpApi.updateWbi(cookieHeader = headers[HttpHeaders.Cookie])
-    }
-    val mixinKey = getMixinKey(
-        requireNotNull(BiliHttpApi.wbiImgKey) { "wbiImgKey can't be null!" } +
-                requireNotNull(BiliHttpApi.wbiSubKey) { "wbiSubKey can't be null!" }
-    )
-
+    val keys = BiliHttpApi.getWbiKeys(headers[HttpHeaders.Cookie])
     val wts = (System.currentTimeMillis() / 1000).toInt()
-    parameter("wts", wts)
-
-    val sortedParams = url.encodedParameters.entries()
+    val parameters = url.parameters.entries()
         .associate { it.key to it.value.first() }
-        .toSortedMap()
-        .map { (key, value) ->
-            // 过滤特殊字符 !"!'()*
-            val filteredValue = value.filter { c -> c !in setOf('!', '\'', '(', ')', '*') }
-            "$key=$filteredValue"
-        }
-        .joinToString("&")
-
-    val wRid = (sortedParams + mixinKey).md5()
-    parameter("w_rid", wRid)
+    parameter("wts", wts)
+    parameter("w_rid", signWbiParameters(parameters, keys.imgKey, keys.subKey, wts))
 }
 
 fun HttpClient.encApiSign() = plugin(HttpSend)

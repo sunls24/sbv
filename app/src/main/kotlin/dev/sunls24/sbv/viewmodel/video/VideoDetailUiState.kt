@@ -13,8 +13,10 @@ data class VideoDetailUiState(
     val videoDetailState: VideoDetailState? = null,
     val loadingState: VideoInfoState = VideoInfoState.Loading,
     val errorTip: String = "",
-    val isFollowingUp: Boolean = false,
+    val isFollowingUp: Boolean? = null,
+    val followingStateLoading: Boolean = false,
     val isLoggedIn: Boolean = false,
+    val isSelfAuthor: Boolean = false,
     val favoriteFolders: List<FavoriteFolderMetadata> = emptyList(),
     val videoFavoriteFolderIds: Set<Long> = emptySet()
 ) {
@@ -46,4 +48,5 @@ data class VideoDetailState(
     val isLiked: Boolean,
     val isCoined: Boolean,
     val isFavorite: Boolean,
+    val historyResolved: Boolean = false,
 )

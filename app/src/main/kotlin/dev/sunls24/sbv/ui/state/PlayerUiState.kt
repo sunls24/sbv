@@ -32,6 +32,7 @@ data class PlayerUiState(
     // 播放状态
     val playerState: PlayerState = PlayerState.Ready,
     val isBuffering: Boolean = false, // 缓冲和暂停会同时出现，故单独列出
+    val isRetrying: Boolean = false,
     // 播放器时钟
 
     // 显示tip

@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -32,9 +31,6 @@ fun <T> SnapshotStateList<T>.swapList(newList: List<T>) {
     clear()
     addAll(newList)
 }
-
-suspend fun <T> SnapshotStateList<T>.swapListWithMainContext(newList: List<T>) =
-    withContext(Dispatchers.Main) { this@swapListWithMainContext.swapList(newList) }
 
 fun Date.formatPubTimeString(): String {
     val calendar = Calendar.getInstance()
@@ -96,8 +92,10 @@ fun String.removeHtmlTags(): String = HtmlCompat.fromHtml(
 fun KeyEvent.isKeyDown(): Boolean = type == KeyEventType.KeyDown
 fun KeyEvent.isDpadRight(): Boolean = key == Key.DirectionRight
 
-fun Int?.toWanString(): String =
-    this?.let {
-        if (it < 10_000) it.toString()
-        else "${(it / 1000) / 10f}万"
-    }.orEmpty()
+private fun Long.toWanValueString(): String =
+    if (this < 10_000) toString()
+    else "${(this / 1000) / 10f}万"
+
+fun Int?.toWanString(): String = this?.toLong()?.toWanValueString().orEmpty()
+
+fun Long?.toWanString(): String = this?.toWanValueString().orEmpty()

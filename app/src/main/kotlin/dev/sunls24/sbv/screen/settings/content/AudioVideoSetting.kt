@@ -47,6 +47,7 @@ fun AudioVideoSetting(
     var selectedActionAfterPlay by remember { mutableStateOf(Prefs.actionAfterPlay) }
 
     var enableSoftwareVideoRenderer by remember { mutableStateOf(Prefs.enableSoftwareVideoDecoder) }
+    var enableIncognitoMode by remember { mutableStateOf(Prefs.incognitoMode) }
 
     Column(
         modifier = modifier
@@ -93,6 +94,15 @@ fun AudioVideoSetting(
             onCheckedChange = {
                 enableSoftwareVideoRenderer = it
                 Prefs.enableSoftwareVideoDecoder = it
+            }
+        )
+        SettingSwitchListItem(
+            title = "隐身播放",
+            supportText = "不会向 Bilibili 上传播放进度",
+            checked = enableIncognitoMode,
+            onCheckedChange = {
+                enableIncognitoMode = it
+                Prefs.incognitoMode = it
             }
         )
     }

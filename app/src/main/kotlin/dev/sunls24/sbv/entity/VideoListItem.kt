@@ -5,5 +5,7 @@ data class VideoListItem(
     val cid: Long,
     val epid: Int? = null,
     val seasonId: Int? = null,
-    val title: String
+    val title: String,
+    val authorMid: Long? = null,
+    val authorName: String? = null
 )

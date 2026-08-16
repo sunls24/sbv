@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.runtime.Composable
@@ -57,6 +58,8 @@ enum class InfoSeekFocus {
     Seek,
     Actions,
 }
+
+internal val ControllerVideoInfoActionRowHeight = 52.dp
 
 @Composable
 fun ControllerVideoInfo(
@@ -239,26 +242,17 @@ fun ControllerVideoInfoBottom(
             ),
         verticalArrangement = Arrangement.Bottom
     ) {
-        Row(
+        ControllerVideoInfoSeekProgress(
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                modifier = Modifier.padding(bottom = 2.dp, start = 24.dp),
-                text = "${if (isSeeking) goTime.formatHourMinSec() else seekerState.currentTime.formatHourMinSec()} / ${seekerState.totalDuration.formatHourMinSec()}",
-                color = Color.White,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    shadow = Shadow(color = Color.Black, blurRadius = 1f),
-                ),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 24.dp)
+            progressModifier = Modifier
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = if (isSeekFocused) 1f else 0f),
                     shape = MaterialTheme.shapes.medium
                 )
+                .onFocusChanged {
+                    isSeekFocused = it.isFocused
+                }
                 .focusProperties {
                     down = buttonsFocusRequester
                 }
@@ -290,20 +284,11 @@ fun ControllerVideoInfoBottom(
 
                     }
                     return@onKeyEvent false
-                }
-                .onFocusChanged {
-                    isSeekFocused = it.isFocused
                 },
-        ) {
-            VideoProgressSeek(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                duration = seekerState.totalDuration,
-                position = if (isSeeking) goTime else seekerState.currentTime,
-                bufferedPercentage = seekerState.bufferedPercentage,
-                isPersistentSeek = false
-            )
-        }
+            isSeeking = isSeeking,
+            goTime = goTime,
+            seekerState = seekerState,
+        )
 
         val icons = listOfNotNull(
             ((if (isPlaying) R.drawable.ic_symbol_pause_filled else R.drawable.ic_symbol_play_arrow_filled) to
@@ -330,6 +315,7 @@ fun ControllerVideoInfoBottom(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(ControllerVideoInfoActionRowHeight)
                 .padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start)
         ) {
@@ -368,6 +354,43 @@ fun ControllerVideoInfoBottom(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun ControllerVideoInfoSeekProgress(
+    modifier: Modifier = Modifier,
+    progressModifier: Modifier = Modifier,
+    isSeeking: Boolean,
+    goTime: Long,
+    seekerState: SeekerState,
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                modifier = Modifier.padding(bottom = 2.dp, start = 24.dp),
+                text = "${if (isSeeking) goTime.formatHourMinSec() else seekerState.currentTime.formatHourMinSec()} / ${seekerState.totalDuration.formatHourMinSec()}",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    shadow = Shadow(color = Color.Black, blurRadius = 1f),
+                ),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .then(progressModifier),
+        ) {
+            VideoProgressSeek(
+                modifier = Modifier.fillMaxWidth(),
+                duration = seekerState.totalDuration,
+                position = if (isSeeking) goTime else seekerState.currentTime,
+                bufferedPercentage = seekerState.bufferedPercentage,
+                isPersistentSeek = false,
+            )
         }
     }
 }

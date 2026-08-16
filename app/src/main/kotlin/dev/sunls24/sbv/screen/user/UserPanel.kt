@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,7 +45,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
-import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import dev.sunls24.sbv.R
@@ -54,7 +52,6 @@ import dev.sunls24.sbv.tv.component.TvAlertDialog
 import dev.sunls24.sbv.tv.component.tvDialogButtonHeight
 import dev.sunls24.sbv.ui.theme.SBVSpacing
 import dev.sunls24.sbv.ui.theme.SBVTheme
-import dev.sunls24.sbv.util.Prefs
 import dev.sunls24.sbv.util.ImageSize
 import dev.sunls24.sbv.util.resizedImageUrl
 import dev.sunls24.sbv.util.requestFocus
@@ -157,7 +154,6 @@ fun UserPanel(
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
     val logoutDismissFocusRequester = remember { FocusRequester() }
-    var inIncognitoMode by remember { mutableStateOf(Prefs.incognitoMode) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -222,16 +218,6 @@ fun UserPanel(
                     onHide()
                 },
             )
-            UserPanelSwitchItem(
-                title = "隐身播放",
-                supportingText = "不会向 Bilibili 上传播放进度",
-                checked = inIncognitoMode,
-                onCheckedChange = { checked ->
-                    inIncognitoMode = checked
-                    Prefs.incognitoMode = checked
-                }
-            )
-
             Spacer(modifier = Modifier.height(SBVSpacing.md))
 
             UserPanelMenuItem(
@@ -350,39 +336,6 @@ private fun UserPanelMenuItem(
         },
         headlineContent = { Text(text = title) },
         onClick = onClick,
-    )
-}
-
-@Composable
-private fun UserPanelSwitchItem(
-    title: String,
-    supportingText: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    ListItem(
-        selected = false,
-        leadingContent = {
-            Icon(
-                painter = painterResource(
-                    if (checked) R.drawable.ic_symbol_visibility_off_filled
-                    else R.drawable.ic_symbol_visibility_filled
-                ),
-                contentDescription = null,
-            )
-        },
-        headlineContent = { Text(text = title) },
-        supportingContent = {
-            Text(text = supportingText)
-        },
-        trailingContent = {
-            Switch(
-                modifier = Modifier.focusable(false),
-                checked = checked,
-                onCheckedChange = null,
-            )
-        },
-        onClick = { onCheckedChange(!checked) },
     )
 }
 
