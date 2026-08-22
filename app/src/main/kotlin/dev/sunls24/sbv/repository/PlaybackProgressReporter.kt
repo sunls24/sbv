@@ -1,6 +1,5 @@
 package dev.sunls24.sbv.repository
 
-import android.util.Log
 import dev.sunls24.biliapi.entity.video.HeartbeatVideoType
 import dev.sunls24.biliapi.repositories.VideoPlayRepository
 import dev.sunls24.sbv.util.Prefs
@@ -37,7 +36,6 @@ class PlaybackProgressReporter(
                 else withTimeout(timeoutMillis) { upload(progress) }
             }.onFailure { error ->
                 if (error is CancellationException) throw error
-                Log.w("PlaybackProgress", "Failed to upload playback progress", error)
             }
         }
     }

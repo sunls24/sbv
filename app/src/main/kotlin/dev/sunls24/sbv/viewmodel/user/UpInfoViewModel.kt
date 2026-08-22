@@ -1,6 +1,5 @@
 package dev.sunls24.sbv.viewmodel.user
 
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -237,8 +236,7 @@ class UpInfoViewModel(
                 if (data.name.isNotBlank()) upName = data.name
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: Exception) {
-                Log.e("UpInfo", "Failed to load profile: mid=$requestedMid", error)
+            } catch (_: Exception) {
                 if (
                     version == requestVersion &&
                     profileVersion == profileRequestVersion &&

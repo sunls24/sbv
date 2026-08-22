@@ -8,10 +8,7 @@ import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.request.header
 import io.ktor.client.request.host
 import io.ktor.http.HttpHeaders
-import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.utils.io.KtorDsl
-
-private val LOGGER = KtorSimpleLogger("dev.sunls24.biliapi.http.plugins.BiliUserAgent")
 
 @KtorDsl
 class BiliUserAgentConfig(
@@ -50,7 +47,6 @@ val BiliUserAgent: ClientPlugin<BiliUserAgentConfig> =
                 } else {
                     webUserAgent
                 }
-            LOGGER.trace("Adding User-Agent header: agent \"${userAgent}\" for ${request.url}")
             request.header(HttpHeaders.UserAgent, userAgent)
         }
     }

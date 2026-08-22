@@ -192,21 +192,27 @@ fun VideoPlayerV3Screen(
                 VideoAspectRatio.SixteenToNine -> 16 / 9f
             }
 
-            SBVVideoPlayer(
+            Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(aspectRatio)
-                    .align(Alignment.Center),
-                videoPlayer = videoPlayer,
-            )
-            DanmakuPlayerCompose(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // 在之前版本中，设置 DanmakuConfig 透明度后，更改其它弹幕设置后，可能会导致弹幕透明度
-                    // 突然变成完全不透明一瞬间，因此这次新版选择直接在此处设置透明度
-                    .alpha(uiState.danmakuState.opacity),
-                danmakuPlayer = danmakuPlayer
-            )
+                    .align(Alignment.Center)
+            ) {
+                SBVVideoPlayer(
+                    modifier = Modifier.fillMaxSize(),
+                    videoPlayer = videoPlayer,
+                )
+                if (danmakuPlayer != null) {
+                    DanmakuPlayerCompose(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // 在之前版本中，设置 DanmakuConfig 透明度后，更改其它弹幕设置后，可能会导致弹幕透明度
+                            // 突然变成完全不透明一瞬间，因此这次新版选择直接在此处设置透明度
+                            .alpha(uiState.danmakuState.opacity),
+                        danmakuPlayer = danmakuPlayer
+                    )
+                }
+            }
             if (showPersistentSeek) {
                 VideoProgressSeek(
                     modifier = Modifier

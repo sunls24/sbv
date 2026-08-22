@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.kuaishou.akdanmaku.DanmakuConfig
 import com.kuaishou.akdanmaku.data.DanmakuItemData
 import com.kuaishou.akdanmaku.ecs.component.filter.TypeFilter
+import com.kuaishou.akdanmaku.ext.RETAINER_BILIBILI
 import com.kuaishou.akdanmaku.render.SimpleRenderer
 import com.kuaishou.akdanmaku.ui.DanmakuPlayer
 import dev.sunls24.biliapi.http.entity.danmaku.DanmakuData
@@ -22,7 +23,7 @@ internal class DanmakuSession {
         player?.let { return it }
         rebuildTypeFilter(state.enabledTypes)
         config = config.copy(
-            density = 120,
+            retainerPolicy = RETAINER_BILIBILI,
             textSizeScale = state.scale,
             screenPart = state.area,
             dataFilter = listOf(typeFilter),
@@ -40,15 +41,24 @@ internal class DanmakuSession {
     }
 
     fun updateSettings(old: DanmakuState, new: DanmakuState) {
+        var configChanged = false
         if (new.enabledTypes != old.enabledTypes) {
             rebuildTypeFilter(new.enabledTypes)
             config.updateFilter()
-            player?.updateConfig(config)
+            configChanged = true
+        }
+        if (new.scale != old.scale) {
+            config = config.copy(textSizeScale = new.scale)
+            configChanged = true
+        }
+        if (new.area != old.area) {
+            config = config.copy(screenPart = new.area)
+            configChanged = true
+        }
+        if (configChanged) player?.updateConfig(config)
+        if (configChanged || new.speedFactor != old.speedFactor) {
             player?.setDanmakuRollingSpeed(new.speedFactor)
         }
-        if (new.scale != old.scale) applyConfig(config.copy(textSizeScale = new.scale), new.speedFactor)
-        if (new.area != old.area) applyConfig(config.copy(screenPart = new.area), new.speedFactor)
-        if (new.speedFactor != old.speedFactor) player?.setDanmakuRollingSpeed(new.speedFactor)
     }
 
     fun updateData(data: List<DanmakuItemData>) = player?.updateData(data)
@@ -57,12 +67,6 @@ internal class DanmakuSession {
     fun pause() = player?.pause()
     fun seekTo(positionMs: Long) = player?.seekTo(positionMs)
     fun updatePlaySpeed(speed: Float) = player?.updatePlaySpeed(speed)
-
-    private fun applyConfig(newConfig: DanmakuConfig, rollingSpeed: Float) {
-        config = newConfig
-        player?.updateConfig(config)
-        player?.setDanmakuRollingSpeed(rollingSpeed)
-    }
 
     private fun rebuildTypeFilter(enabledTypes: List<DanmakuType>) {
         typeFilter.clear()

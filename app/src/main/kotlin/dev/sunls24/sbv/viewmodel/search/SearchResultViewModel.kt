@@ -1,6 +1,5 @@
 package dev.sunls24.sbv.viewmodel.search
 
-import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,8 +95,7 @@ class SearchResultViewModel(
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: Exception) {
-                Log.e("SearchResult", "Failed to load $type search results", error)
+            } catch (_: Exception) {
                 if (version == state(type).requestVersion) {
                     updateState(type) { it.copy(loadState = SearchLoadState.Error) }
                 }

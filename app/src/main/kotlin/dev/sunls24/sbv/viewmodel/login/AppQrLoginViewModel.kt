@@ -1,7 +1,6 @@
 package dev.sunls24.sbv.viewmodel.login
 
 import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -60,7 +59,6 @@ class AppQrLoginViewModel(
             } catch (error: Exception) {
                 error.message?.toast(SBVApp.context)
                 state = QrLoginState.Error
-                Log.e("AppQrLogin", "QR login failed", error)
             }
         }
     }
@@ -113,7 +111,6 @@ class AppQrLoginViewModel(
         } catch (error: Exception) {
             error.message?.toast(SBVApp.context)
             state = QrLoginState.Error
-            Log.e("AppQrLogin", "QR login polling failed", error)
             true
         }
     }

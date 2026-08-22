@@ -7,7 +7,7 @@ object AppConfiguration {
 
     private const val versionMajor = 1
     private const val versionMinor = 0
-    private const val versionPatch = 38
+    private const val versionPatch = 47
 
     const val versionName = "$versionMajor.$versionMinor.$versionPatch"
     const val versionCode = versionMajor * 1_000_000 + versionMinor * 1_000 + versionPatch

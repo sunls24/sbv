@@ -68,6 +68,10 @@ class VideoPlayerV3ViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
+    private companion object {
+        const val TAG = "VideoPlayer"
+    }
+
     var videoPlayer: SBVPlayer? by mutableStateOf(null)
         private set
     var danmakuPlayer: DanmakuPlayer? by mutableStateOf(null)
@@ -92,13 +96,18 @@ class VideoPlayerV3ViewModel(
     private var seekerUpdateJob: Job? = null
     private var loadVideoJob: Job? = null
     private var subtitleJob: Job? = null
+    private var danmakuLoadJob: Job? = null
+    private var danmakuLoadingCid: Long? = null
+    private var danmakuLoadedCid: Long? = null
 
     private var backToStartCountdownJob: Job? = null
+    private var pendingBackToStartPrompt = false
     private var playNextCountdownJob: Job? = null
     private var previewTipCountdownJob: Job? = null
 
     private val videoPlayerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            Log.e(TAG, "Player error", error)
             _uiState.update {
                 it.copy(
                     isBuffering = false,
@@ -157,9 +166,9 @@ class VideoPlayerV3ViewModel(
                         isRetrying = false,
                     )
                 }
-                if (_uiState.value.lastPlayed > 0) {
-                    seekToLastPlayed()
-                    _uiState.update { it.copy(lastPlayed = 0) }
+                if (pendingBackToStartPrompt) {
+                    pendingBackToStartPrompt = false
+                    showBackToStartPrompt()
                 }
             } else {
                 danmakuSession.pause()
@@ -311,11 +320,18 @@ class VideoPlayerV3ViewModel(
     }
 
     fun initDanmakuPlayer() {
-        if (danmakuPlayer != null) return
+        if (danmakuPlayer != null || _uiState.value.danmakuState.enabledTypes.isEmpty()) {
+            return
+        }
         danmakuPlayer = danmakuSession.initialize(_uiState.value.danmakuState)
+        danmakuSession.seekTo(videoPlayer?.currentPosition ?: 0L)
     }
 
     fun releaseDanmakuPlayer() {
+        danmakuLoadJob?.cancel()
+        danmakuLoadJob = null
+        danmakuLoadingCid = null
+        danmakuLoadedCid = null
         danmakuSession.release()
         danmakuPlayer = null
     }
@@ -356,8 +372,7 @@ class VideoPlayerV3ViewModel(
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: Exception) {
-                Log.w("VideoPlayer", "Subtitle loading failed", error)
+            } catch (_: Exception) {
             }
         }
     }
@@ -420,7 +435,20 @@ class VideoPlayerV3ViewModel(
 
         // 首先更新UI
         _uiState.update { it.copy(danmakuState = new) }
-        danmakuSession.updateSettings(old, new)
+
+        when {
+            old.enabledTypes.isEmpty() && new.enabledTypes.isNotEmpty() -> {
+                initDanmakuPlayer()
+                val cid = _uiState.value.cid
+                if (cid > 0L) {
+                    startDanmakuLoad(cid)
+                }
+            }
+            old.enabledTypes.isNotEmpty() && new.enabledTypes.isEmpty() -> {
+                releaseDanmakuPlayer()
+            }
+            new.enabledTypes.isNotEmpty() -> danmakuSession.updateSettings(old, new)
+        }
 
         // ===== 副作用处理 =====
         if (new.enabledTypes != old.enabledTypes) {
@@ -568,6 +596,7 @@ class VideoPlayerV3ViewModel(
     fun playNewVideo(newVideo: VideoListItem) {
         videoPlayer?.pause()
         subtitleJob?.cancel()
+        pendingBackToStartPrompt = false
 
         val state = _uiState.value
         val shouldUpdateVideoList = state.availableVideoList.none {
@@ -617,7 +646,7 @@ class VideoPlayerV3ViewModel(
     }
 
     fun loadVideoWithResources(
-        startPosition: Long = 0L,
+        startPosition: Long? = null,
         autoPlay: Boolean = true,
         randomizeCdn: Boolean = false,
     ) {
@@ -627,6 +656,8 @@ class VideoPlayerV3ViewModel(
         val epid = state.epid
         val fromSeason = state.fromSeason
         val profile = state.mediaProfileState
+        val resolvedStartPosition = (startPosition ?: state.lastPlayed.toLong()).coerceAtLeast(0L)
+        val isInitialResume = startPosition == null && resolvedStartPosition > 0L
 
         loadVideoJob?.cancel()
         _uiState.update { current ->
@@ -662,9 +693,16 @@ class VideoPlayerV3ViewModel(
                     val player = checkNotNull(videoPlayer) { "Video player is not initialized" }
                     applyPlaybackResources(resources)
                     player.setMedia(resources.media.videoUrl, resources.media.audioUrl)
+                    if (resolvedStartPosition > 0L) {
+                        player.seekTo(resolvedStartPosition)
+                        danmakuSession.seekTo(resolvedStartPosition)
+                        danmakuSession.pause()
+                        _seekerState.update { it.copy(currentTime = resolvedStartPosition) }
+                    }
                     player.prepare()
-                    if (startPosition > 0L) {
-                        player.seekTo(startPosition)
+                    if (isInitialResume) {
+                        _uiState.update { it.copy(lastPlayed = 0) }
+                        pendingBackToStartPrompt = true
                     }
                     if (autoPlay) {
                         player.play()
@@ -682,7 +720,11 @@ class VideoPlayerV3ViewModel(
                             ?.let { loadSubtitle(it.id) }
                     }
                 }
-                launch { loadDanmaku(cid) }
+                withContext(Dispatchers.Main.immediate) {
+                    if (_uiState.value.danmakuState.enabledTypes.isNotEmpty()) {
+                        startDanmakuLoad(cid)
+                    }
+                }
                 launch { loadRelatedVideos(avid) }
             } catch (e: CancellationException) {
                 throw e // 让结构化并发正常取消，不作为播放错误处理
@@ -690,7 +732,7 @@ class VideoPlayerV3ViewModel(
                 if (videoPlayer == null || !isCurrentMediaRequest(avid, cid, profile)) {
                     return@launch
                 }
-                Log.e("VideoPlayer", "Video loading failed", e)
+                Log.e(TAG, "Video loading failed", e)
 
                 _uiState.update {
                     it.copy(
@@ -767,17 +809,39 @@ class VideoPlayerV3ViewModel(
             state.mediaProfileState == profile
     }
 
-    private suspend fun loadDanmaku(cid: Long) {
-        runCatching {
-            val danmakuXmlData = BiliHttpApi.getDanmakuXml(
-                cid = cid,
-                sessData = authRepository.sessionData.orEmpty(),
-                transform = danmakuSession::toItemData
-            )
+    private fun startDanmakuLoad(cid: Long) {
+        if (danmakuLoadedCid == cid ||
+            (danmakuLoadingCid == cid && danmakuLoadJob?.isActive == true)
+        ) {
+            return
+        }
 
-            danmakuXmlData.data
-        }.onSuccess { data ->
-            danmakuSession.updateData(data)
+        danmakuLoadJob?.cancel()
+        danmakuLoadingCid = cid
+        danmakuLoadJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val data = BiliHttpApi.getDanmakuXml(
+                    cid = cid,
+                    sessData = authRepository.sessionData.orEmpty(),
+                    transform = danmakuSession::toItemData
+                ).data
+
+                withContext(Dispatchers.Main.immediate) {
+                    if (_uiState.value.cid != cid ||
+                        _uiState.value.danmakuState.enabledTypes.isEmpty()
+                    ) {
+                        return@withContext
+                    }
+                    danmakuSession.updateData(data)
+                    danmakuLoadedCid = cid
+                    if (videoPlayer?.isPlaying == true) {
+                        danmakuSession.start()
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -889,14 +953,7 @@ class VideoPlayerV3ViewModel(
         }
     }
 
-    private fun seekToLastPlayed() {
-        val time = _uiState.value.lastPlayed.toLong()
-
-        videoPlayer?.seekTo(time)
-        danmakuSession.seekTo(time)
-        // akdanmaku 会在跳转后立即播放，如果需要缓冲则会导致弹幕不同步
-        danmakuSession.pause()
-
+    private fun showBackToStartPrompt() {
         _uiState.update { it.copy(showBackToStart = true) }
 
         backToStartCountdownJob?.cancel()
