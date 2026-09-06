@@ -5,7 +5,6 @@
 /build
 **/build/
 .kotlin/
-.impeccable/
 /captures
 .externalNativeBuild
 .cxx
